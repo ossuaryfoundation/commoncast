@@ -5,12 +5,14 @@
  * concatenated into a Blob on stop, then exposed via a one-shot Blob URL. For
  * long sessions, swap this out for a WritableStream → IndexedDB pipeline.
  */
-import { onScopeDispose, ref, shallowRef } from "vue";
+import { onScopeDispose, ref, shallowRef, type Ref, type ShallowRef } from "vue";
+
+export type RecorderState = "idle" | "recording" | "paused" | "stopped";
 
 export interface UseStudioRecorderReturn {
-  readonly state: Readonly<ReturnType<typeof ref<"idle" | "recording" | "paused" | "stopped">>>;
-  readonly lastBlob: Readonly<ReturnType<typeof shallowRef<Blob | null>>>;
-  readonly elapsedMs: Readonly<ReturnType<typeof ref<number>>>;
+  readonly state: Readonly<Ref<RecorderState>>;
+  readonly lastBlob: Readonly<ShallowRef<Blob | null>>;
+  readonly elapsedMs: Readonly<Ref<number>>;
   start(stream: MediaStream, mimeType?: string): void;
   pause(): void;
   resume(): void;
@@ -18,7 +20,7 @@ export interface UseStudioRecorderReturn {
 }
 
 export function useStudioRecorder(): UseStudioRecorderReturn {
-  const state = ref<"idle" | "recording" | "paused" | "stopped">("idle");
+  const state = ref<RecorderState>("idle");
   const lastBlob = shallowRef<Blob | null>(null);
   const elapsedMs = ref(0);
 

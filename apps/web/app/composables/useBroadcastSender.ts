@@ -10,12 +10,11 @@
  * broadcastOut* addresses. Media flows P2P over WebRTC — we do NOT try to
  * push raw frames through clasp (there's a 64KB frame cap).
  */
-import { onScopeDispose, ref, shallowRef } from "vue";
+import { onScopeDispose, ref, shallowRef, type Ref } from "vue";
 import { useNuxtApp } from "#app";
 import {
   addresses,
   type ClaspClient,
-  type SignalPayload,
 } from "@commoncast/clasp-client";
 
 export type BroadcastSenderState =
@@ -26,7 +25,7 @@ export type BroadcastSenderState =
   | "closed";
 
 export interface UseBroadcastSenderReturn {
-  readonly state: Readonly<ReturnType<typeof ref<BroadcastSenderState>>>;
+  readonly state: Readonly<Ref<BroadcastSenderState>>;
   /**
    * Open a one-way WebRTC connection carrying `track` and publish the offer
    * at broadcastOut(studioId, destAddr). A receiver subscribed to that
@@ -125,6 +124,3 @@ export function useBroadcastSender(): UseBroadcastSenderReturn {
 
   return { state, publish, close };
 }
-
-// Silence unused import if the linter strips types aggressively.
-export type _SignalPayload = SignalPayload;

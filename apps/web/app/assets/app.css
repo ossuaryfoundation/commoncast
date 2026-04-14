@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "@commoncast/design-system/tokens.css";
-@import "@commoncast/design-system/src/theme.css";
+@import "@commoncast/design-system/theme.css";
 
 /* commoncast app-level overrides — keep minimal. */
 html,

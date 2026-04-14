@@ -5,7 +5,7 @@
  * Callers get a small imperative facade (addSource, removeSource, setScene,
  * getOutputTrack) plus a ready flag.
  */
-import { onScopeDispose, shallowRef, watch, type Ref } from "vue";
+import { onScopeDispose, shallowRef, watch, type Ref, type ShallowRef } from "vue";
 import {
   createCompositor,
   type Compositor,
@@ -16,12 +16,13 @@ import {
 } from "@commoncast/studio-engine";
 
 export interface UseStudioEngineReturn {
-  readonly compositor: Readonly<ReturnType<typeof shallowRef<Compositor | null>>>;
-  readonly ready: Readonly<ReturnType<typeof shallowRef<boolean>>>;
+  readonly compositor: Readonly<ShallowRef<Compositor | null>>;
+  readonly ready: Readonly<ShallowRef<boolean>>;
   addSource(spec: SourceSpec): Promise<void>;
   removeSource(id: SourceId): void;
   setScene(scene: Scene): void;
   getOutputTrack(): MediaStreamTrack | null;
+  getOutputStream(): MediaStream | null;
 }
 
 export function useStudioEngine(
@@ -70,6 +71,9 @@ export function useStudioEngine(
     },
     getOutputTrack() {
       return compositor.value?.getOutputTrack() ?? null;
+    },
+    getOutputStream() {
+      return compositor.value?.getOutputStream() ?? null;
     },
   };
 }

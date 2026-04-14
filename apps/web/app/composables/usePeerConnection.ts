@@ -13,7 +13,7 @@
  *   // inbound:
  *   room.onSignal((fromPid, payload) => pc.handleSignal(payload));
  */
-import { onScopeDispose, shallowRef } from "vue";
+import { onScopeDispose, shallowRef, type ShallowRef } from "vue";
 import type { SignalPayload } from "@commoncast/clasp-client";
 
 export interface UsePeerConnectionOptions {
@@ -23,7 +23,7 @@ export interface UsePeerConnectionOptions {
 }
 
 export interface UsePeerConnectionReturn {
-  readonly connectionState: Readonly<ReturnType<typeof shallowRef<RTCPeerConnectionState>>>;
+  readonly connectionState: Readonly<ShallowRef<RTCPeerConnectionState>>;
   addLocalTrack(track: MediaStreamTrack, stream?: MediaStream): void;
   createOffer(): Promise<void>;
   handleSignal(payload: SignalPayload): Promise<void>;

@@ -15,6 +15,7 @@
       "import": "./src/tokens/tokens.ts"
     },
     "./tokens.css": "./src/tokens/tokens.css",
+    "./theme.css": "./src/theme.css",
     "./tailwind.preset": {
       "types": "./src/tailwind.preset.ts",
       "import": "./src/tailwind.preset.ts"

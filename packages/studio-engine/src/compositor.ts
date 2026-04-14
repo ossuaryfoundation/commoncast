@@ -21,12 +21,12 @@
 
 import {
   Application,
+  Assets,
   Container,
   Graphics,
   Sprite,
   Text,
   Texture,
-  type Renderer,
 } from "pixi.js";
 import { computeLayout } from "./layouts/index.js";
 import { createCameraSource, type CameraSourceHandle } from "./sources/CameraSource.js";
@@ -128,7 +128,7 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
         break;
       }
       case "image": {
-        const texture = await Texture.fromURL(source.url);
+        const texture = (await Assets.load(source.url)) as Texture;
         const sprite = new Sprite(texture);
         sources.set(source.id, { spec: source, sprite });
         break;
@@ -336,6 +336,3 @@ function createTickerNode(
   c.y = settings.height - 36;
   return c;
 }
-
-// Silence the "unused import" lint if Pixi's Renderer type is stripped in build
-export type _PixiRenderer = Renderer;

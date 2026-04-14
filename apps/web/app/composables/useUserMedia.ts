@@ -5,14 +5,14 @@
  * deeply-reactive state. The derived primitives (isLive, error, tracks count)
  * are the reactive surface. See CLAUDE.md §3.
  */
-import { shallowRef, ref, onScopeDispose } from "vue";
+import { shallowRef, ref, onScopeDispose, type Ref, type ShallowRef } from "vue";
 
 export interface UseUserMediaReturn {
-  readonly stream: Readonly<ReturnType<typeof shallowRef<MediaStream | null>>>;
-  readonly videoTrack: Readonly<ReturnType<typeof shallowRef<MediaStreamTrack | null>>>;
-  readonly audioTrack: Readonly<ReturnType<typeof shallowRef<MediaStreamTrack | null>>>;
-  readonly isLive: Readonly<ReturnType<typeof ref<boolean>>>;
-  readonly error: Readonly<ReturnType<typeof shallowRef<unknown>>>;
+  readonly stream: Readonly<ShallowRef<MediaStream | null>>;
+  readonly videoTrack: Readonly<ShallowRef<MediaStreamTrack | null>>;
+  readonly audioTrack: Readonly<ShallowRef<MediaStreamTrack | null>>;
+  readonly isLive: Readonly<Ref<boolean>>;
+  readonly error: Readonly<ShallowRef<unknown>>;
   start(constraints?: MediaStreamConstraints): Promise<MediaStream>;
   stop(): void;
 }

@@ -8,6 +8,8 @@
 import { defineStore } from "pinia";
 import type { LayoutId } from "@commoncast/design-system";
 
+export type OverlayKey = "logo" | "lowerThird" | "ticker";
+
 export interface Scene {
   id: string;
   index: number;
@@ -117,7 +119,7 @@ export const useStudioStore = defineStore("studio", {
     setLayout(layout: LayoutId) {
       this.activeLayout = layout;
     },
-    setOverlay(key: keyof typeof this.overlays, value: boolean) {
+    setOverlay(key: OverlayKey, value: boolean) {
       this.overlays[key] = value;
     },
     setAccent(color: string) {

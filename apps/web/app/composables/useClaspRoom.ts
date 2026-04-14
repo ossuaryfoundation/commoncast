@@ -3,7 +3,7 @@
  *
  * The clasp client itself is provided by plugins/clasp.client.ts.
  */
-import { onScopeDispose, ref, shallowRef, type Ref } from "vue";
+import { onScopeDispose, ref, shallowRef, type Ref, type ShallowRef } from "vue";
 import { useNuxtApp } from "#app";
 import {
   joinStudio,
@@ -14,7 +14,7 @@ import {
 } from "@commoncast/clasp-client";
 
 export interface UseClaspRoomReturn {
-  readonly session: Readonly<ReturnType<typeof shallowRef<StudioSession | null>>>;
+  readonly session: Readonly<ShallowRef<StudioSession | null>>;
   readonly participants: Ref<Record<string, ParticipantEntry>>;
   readonly state: Ref<"idle" | "joining" | "joined" | "error">;
   join(entry: ParticipantEntry): Promise<void>;
