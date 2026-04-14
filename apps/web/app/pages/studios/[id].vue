@@ -32,6 +32,7 @@ import { useBroadcastSender } from "~/composables/useBroadcastSender";
 import { useClaspRoom } from "~/composables/useClaspRoom";
 import { useStudioPeers } from "~/composables/useStudioPeers";
 import { useStudioParticipants } from "~/composables/useStudioParticipants";
+import { useHostMixer } from "~/composables/useHostMixer";
 import { useStageSelection } from "~/composables/useStageSelection";
 import { useScreenCapture } from "~/composables/useScreenCapture";
 import { useAudioLevels } from "~/composables/useAudioLevels";
@@ -105,10 +106,11 @@ async function switchMic(deviceId: string | null) {
   await startLocalMedia();
 }
 
-// ─── recorder + sender + selection ─────────────────────────────────
+// ─── recorder + sender + selection + audio mixer ──────────────────
 const recorder = useStudioRecorder();
 const sender = useBroadcastSender();
 const selection = useStageSelection();
+const hostMixer = useHostMixer();
 
 // ─── screen capture ────────────────────────────────────────────────
 const screen = useScreenCapture();
@@ -122,14 +124,26 @@ const peers = useStudioPeers({
   room,
   myPid,
   role,
-  getLocalTrack: () => media.videoTrack.value,
+  getLocalTracks: () => {
+    const out: MediaStreamTrack[] = [];
+    const v = media.videoTrack.value;
+    const a = media.audioTrack.value;
+    if (v) out.push(v);
+    if (a) out.push(a);
+    return out;
+  },
   onRemoteTrack: async (fromPid, track) => {
-    // Peer connections currently only carry video tracks; defensively
-    // ignore audio until the mixer slice lands so the engine never gets
-    // an audio-only track handed to an addSource({kind:"camera"}) call.
-    if (track.kind !== "video") return;
     const label = participantsStore.all[fromPid]?.name ?? `Peer ${fromPid.slice(0, 6)}`;
-    await mountSource(fromPid, label, track);
+    if (track.kind === "video") {
+      await mountSource(fromPid, label, track);
+      return;
+    }
+    if (track.kind === "audio") {
+      // Route remote peer audio into the host mixer. The mixer key is the
+      // peer's pid so participants-store mute changes can flip it later.
+      hostMixer.addSource(fromPid, label, track, { kind: "peer" });
+      return;
+    }
   },
 });
 
@@ -225,15 +239,50 @@ watch(
   },
 );
 
-// Reconcile when peers disappear.
+// Reconcile when peers disappear — drop both video (engine) and audio
+// (mixer) sources for the departed pid.
 watch(
   () => peers.remotePids.value,
   (pids, prev) => {
     if (!prev) return;
     for (const old of prev) {
-      if (!pids.includes(old)) unmountSource(old);
+      if (pids.includes(old)) continue;
+      unmountSource(old);
+      hostMixer.removeSource(old);
     }
   },
+);
+
+// Route our own local microphone track into the mixer. Uses a label
+// (myName) so the mixer strip row looks right; kind: "local" colors
+// the badge signal-red.
+watch(
+  () => media.audioTrack.value,
+  (track) => {
+    if (track) {
+      hostMixer.addSource(localSourceId, `${myName} · mic`, track, {
+        kind: "local",
+      });
+    } else {
+      hostMixer.removeSource(localSourceId);
+    }
+  },
+  { immediate: true },
+);
+
+// Mirror participant mute flags from the projection onto the mixer so
+// host-over mute has immediate effect on the local mix, even before the
+// guest's cooperative track-disable round-trip completes.
+watch(
+  () => participantsStore.list.map((p) => ({ pid: p.pid, muted: p.muted })),
+  (rows) => {
+    for (const row of rows) {
+      if (row.pid === myPid) continue;
+      if (!hostMixer.mixer.value?.has(row.pid)) continue;
+      hostMixer.setMuted(row.pid, row.muted);
+    }
+  },
+  { deep: true },
 );
 
 // Stage-driven assignment for remote peers. A peer's mounted track is only
@@ -323,14 +372,33 @@ watch(
   { deep: true },
 );
 
-// ─── broadcast + record wiring (unchanged semantics) ──────────────
+/**
+ * Build the composited output stream: compositor's canvas video track +
+ * host mixer's output audio track. This is what recording and broadcast
+ * both consume. Prior to slice B this was video-only — the silent-audio
+ * bug lived here.
+ */
+function buildOutputStream(): MediaStream | null {
+  const videoStream = engine.getOutputStream();
+  if (!videoStream) return null;
+  const tracks: MediaStreamTrack[] = [];
+  const v = videoStream.getVideoTracks()[0];
+  if (v) tracks.push(v);
+  const a = hostMixer.outputTrack.value;
+  if (a) tracks.push(a);
+  if (tracks.length === 0) return null;
+  return new MediaStream(tracks);
+}
+
+// ─── broadcast + record wiring ────────────────────────────────────
 watch(
   () => studio.isLive,
   async (live) => {
     if (live) {
-      const track = engine.getOutputTrack();
-      if (!track) {
-        console.warn("[commoncast] broadcast: engine output track not ready");
+      await hostMixer.resume();
+      const stream = buildOutputStream();
+      if (!stream) {
+        console.warn("[commoncast] broadcast: output stream not ready");
         studio.isLive = false;
         return;
       }
@@ -338,7 +406,7 @@ watch(
         await sender.publish({
           studioId: studio.studioId,
           destAddr: "test",
-          track,
+          stream,
         });
       } catch (err) {
         console.error("[commoncast] broadcast publish failed", err);
@@ -354,9 +422,10 @@ watch(
   () => studio.isRecording,
   async (rec) => {
     if (rec) {
-      const stream = engine.getOutputStream();
+      await hostMixer.resume();
+      const stream = buildOutputStream();
       if (!stream) {
-        console.warn("[commoncast] record: engine output stream not ready");
+        console.warn("[commoncast] record: output stream not ready");
         studio.isRecording = false;
         return;
       }
@@ -437,6 +506,7 @@ const ctx: StudioContext = {
   media,
   peers,
   participants,
+  hostMixer,
   selection,
   recorder,
   sender,

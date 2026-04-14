@@ -27,14 +27,15 @@ export type BroadcastSenderState =
 export interface UseBroadcastSenderReturn {
   readonly state: Readonly<Ref<BroadcastSenderState>>;
   /**
-   * Open a one-way WebRTC connection carrying `track` and publish the offer
-   * at broadcastOut(studioId, destAddr). A receiver subscribed to that
+   * Open a one-way WebRTC connection carrying every track in `stream`
+   * (both video and audio, if present) and publish the offer at
+   * broadcastOut(studioId, destAddr). A receiver subscribed to that
    * address writes the answer back and we complete the handshake.
    */
   publish(opts: {
     studioId: string;
     destAddr: string;
-    track: MediaStreamTrack;
+    stream: MediaStream;
   }): Promise<void>;
   close(): void;
 }
@@ -51,7 +52,7 @@ export function useBroadcastSender(): UseBroadcastSenderReturn {
   async function publish(opts: {
     studioId: string;
     destAddr: string;
-    track: MediaStreamTrack;
+    stream: MediaStream;
   }): Promise<void> {
     const nuxt = useNuxtApp();
     const clasp = nuxt.$clasp as ClaspClient;
@@ -62,7 +63,14 @@ export function useBroadcastSender(): UseBroadcastSenderReturn {
     pcRef.value = pc;
     state.value = "negotiating";
 
-    pc.addTrack(opts.track);
+    // Attach every track from the output stream — typically one video
+    // (from the compositor's canvas capture) + one audio (from the
+    // AudioMixer's destination node). Associating them with the same
+    // MediaStream lets the receiver reconstitute a single stream and
+    // keep A/V in sync.
+    for (const track of opts.stream.getTracks()) {
+      pc.addTrack(track, opts.stream);
+    }
 
     const offerAddr = addresses.broadcastOut(opts.studioId, opts.destAddr);
     const answerAddr = addresses.broadcastOutAnswer(opts.studioId, opts.destAddr);

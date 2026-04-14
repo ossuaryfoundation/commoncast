@@ -26,15 +26,16 @@ import {
   type LayoutId,
 } from "@commoncast/design-system";
 import { useStudioStore } from "~/stores/studio";
+import AudioMixerStrip from "~/components/studio/AudioMixerStrip.vue";
 
 const studio = useStudioStore();
 
 const tabs = [
   { id: "layout", label: "Layout" },
+  { id: "audio", label: "Audio" },
   { id: "overlays", label: "Overlays" },
   { id: "scenes", label: "Scenes" },
   { id: "brand", label: "Brand" },
-  { id: "chat", label: "Chat" },
 ] as const;
 type TabId = (typeof tabs)[number]["id"];
 const activeTab = ref<TabId>("layout");
@@ -81,6 +82,11 @@ const overlayState = computed(() => ({
             @select="studio.setLayout(l.id)"
           />
         </div>
+      </div>
+
+      <!-- Audio mixer -->
+      <div v-else-if="activeTab === 'audio'">
+        <AudioMixerStrip />
       </div>
 
       <!-- Overlays (per scene) -->
@@ -143,13 +149,6 @@ const overlayState = computed(() => ({
         <Input v-model="studio.brand.tickerText" label="Ticker text" />
       </div>
 
-      <!-- Chat -->
-      <div
-        v-else
-        class="border border-dashed border-[color:var(--cc-border-strong)] bg-transparent p-3 font-ui text-[9px] uppercase leading-[1.6] tracking-[0.1em] text-[var(--cc-ink-ghost)]"
-      >
-        Chat is not wired yet. Multi-platform chat + moderation is a separate slice.
-      </div>
     </div>
   </aside>
 </template>

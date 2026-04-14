@@ -23,9 +23,14 @@ export interface UseStudioPeersOptions {
   room: UseClaspRoomReturn;
   myPid: string;
   role: "host" | "guest";
-  /** Called lazily when a peer needs a local track to send. */
-  getLocalTrack: () => MediaStreamTrack | null;
-  /** Called once per inbound remote track, per peer. */
+  /**
+   * Called lazily when a peer needs local tracks to send. Return both the
+   * video and audio tracks; the peer connection adds each one via a
+   * separate addTrack call so remote clients receive a `track` event per
+   * kind.
+   */
+  getLocalTracks: () => ReadonlyArray<MediaStreamTrack>;
+  /** Called once per inbound remote track, per peer. Track kind is preserved. */
   onRemoteTrack: (fromPid: string, track: MediaStreamTrack) => void;
 }
 
@@ -55,8 +60,9 @@ export function useStudioPeers(opts: UseStudioPeersOptions): UseStudioPeersRetur
       onSignalOut: (payload) => room.sendSignal(remotePid, payload),
       onRemoteTrack: (track) => opts.onRemoteTrack(remotePid, track),
     });
-    const localTrack = opts.getLocalTrack();
-    if (localTrack) pc.addLocalTrack(localTrack);
+    for (const track of opts.getLocalTracks()) {
+      pc.addLocalTrack(track);
+    }
     peers.set(remotePid, pc);
     refreshRemotePids();
     return pc;

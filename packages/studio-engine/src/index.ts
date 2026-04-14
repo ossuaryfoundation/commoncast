@@ -18,3 +18,4 @@ export {
   type Compositor,
   type CreateCompositorOptions,
 } from "./compositor.js";
+export { AudioMixer, type AudioMixerSourceOptions } from "./audio/AudioMixer.js";

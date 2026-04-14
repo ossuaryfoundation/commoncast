@@ -19,6 +19,7 @@ export { default as OnAirBadge } from "./primitives/OnAirBadge.vue";
 export { default as PanelHeader } from "./primitives/PanelHeader.vue";
 export { default as Select } from "./primitives/Select.vue";
 export type { SelectItem } from "./primitives/Select.vue";
+export { default as Slider } from "./primitives/Slider.vue";
 export { default as StatusDot } from "./primitives/StatusDot.vue";
 export { default as Tabs } from "./primitives/Tabs.vue";
 export { default as Toggle } from "./primitives/Toggle.vue";
