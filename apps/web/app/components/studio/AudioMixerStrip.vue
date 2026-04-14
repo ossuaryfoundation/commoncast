@@ -13,12 +13,20 @@
 -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { Slider } from "@commoncast/design-system";
+import { Slider, VUMeter } from "@commoncast/design-system";
 import { useStudioContext } from "~/composables/useStudioContext";
 
 const ctx = useStudioContext();
 
 const sources = computed(() => ctx.hostMixer.sources.value);
+const levels = computed(() => ctx.hostMixer.levels.value);
+
+function levelFor(id: string) {
+  return levels.value[id]?.level ?? 0;
+}
+function peakFor(id: string) {
+  return levels.value[id]?.peak ?? 0;
+}
 
 function onGain(id: string, v: number) {
   ctx.hostMixer.setGain(id, v);
@@ -79,6 +87,30 @@ function onToggleMute(id: string, next: boolean) {
         :disabled="row.muted"
         :format="(v) => `${Math.round(v * 100)}%`"
         @update:model-value="(v) => onGain(row.id, v)"
+      />
+      <VUMeter
+        :level="row.muted ? 0 : levelFor(row.id)"
+        :peak="row.muted ? 0 : peakFor(row.id)"
+        :height="5"
+      />
+    </div>
+
+    <div
+      v-if="sources.length > 0"
+      class="flex flex-col gap-1 border-t border-[color:var(--cc-border)] pt-3"
+    >
+      <div class="flex items-center justify-between">
+        <span class="font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-muted)]">
+          Master
+        </span>
+        <span class="font-ui text-[8.5px] tabular-nums text-[var(--cc-ink-ghost)]">
+          {{ Math.round(ctx.hostMixer.masterLevel.value * 100) }}%
+        </span>
+      </div>
+      <VUMeter
+        :level="ctx.hostMixer.masterLevel.value"
+        :peak="ctx.hostMixer.masterPeak.value"
+        :height="7"
       />
     </div>
   </section>

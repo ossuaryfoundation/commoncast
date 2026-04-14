@@ -21,6 +21,7 @@ export interface UseStudioEngineReturn {
   addSource(spec: SourceSpec): Promise<void>;
   removeSource(id: SourceId): void;
   setScene(scene: Scene): void;
+  updateSourceSpeaking(id: SourceId, speaking: boolean): void;
   getOutputTrack(): MediaStreamTrack | null;
   getOutputStream(): MediaStream | null;
 }
@@ -68,6 +69,9 @@ export function useStudioEngine(
     },
     setScene(scene) {
       compositor.value?.setScene(scene);
+    },
+    updateSourceSpeaking(id, speaking) {
+      compositor.value?.updateSourceSpeaking(id, speaking);
     },
     getOutputTrack() {
       return compositor.value?.getOutputTrack() ?? null;

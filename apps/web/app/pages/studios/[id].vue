@@ -285,6 +285,46 @@ watch(
   { deep: true },
 );
 
+// Drive the compositor's speaker-ring rendering from the mixer's
+// per-source levels. Hysteresis: a source flips to speaking when its
+// level crosses ON_THRESHOLD; it flips back when it drops under
+// OFF_THRESHOLD. This prevents the ring from strobing on every frame
+// near the boundary. A minimum hold duration smooths short dips.
+const SPEAK_ON = 0.05;
+const SPEAK_OFF = 0.025;
+const SPEAK_HOLD_MS = 250;
+const speakingStates = new Map<string, { speaking: boolean; lastOnAt: number }>();
+
+watch(
+  () => hostMixer.levels.value,
+  (levels) => {
+    if (!engine.ready.value) return;
+    const now = performance.now();
+    for (const [id, { level }] of Object.entries(levels)) {
+      const state = speakingStates.get(id) ?? { speaking: false, lastOnAt: 0 };
+      if (!state.speaking && level >= SPEAK_ON) {
+        state.speaking = true;
+        state.lastOnAt = now;
+        engine.updateSourceSpeaking(asSourceId(id), true);
+      } else if (state.speaking && level < SPEAK_OFF && now - state.lastOnAt > SPEAK_HOLD_MS) {
+        state.speaking = false;
+        engine.updateSourceSpeaking(asSourceId(id), false);
+      } else if (state.speaking && level >= SPEAK_OFF) {
+        state.lastOnAt = now;
+      }
+      speakingStates.set(id, state);
+    }
+    // Clear any speakingStates for sources that no longer exist in levels.
+    for (const id of Array.from(speakingStates.keys())) {
+      if (!(id in levels)) {
+        const prev = speakingStates.get(id);
+        if (prev?.speaking) engine.updateSourceSpeaking(asSourceId(id), false);
+        speakingStates.delete(id);
+      }
+    }
+  },
+);
+
 // Stage-driven assignment for remote peers. A peer's mounted track is only
 // auto-assigned to scene slots when their participant entry says
 // `stage === "live"`; backstage peers stay mounted (so we can see them in

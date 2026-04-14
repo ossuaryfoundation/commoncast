@@ -49,6 +49,12 @@ export interface Compositor {
   addSource(source: SourceSpec): Promise<void>;
   removeSource(id: SourceId): void;
   setScene(scene: Scene): void;
+  /**
+   * Mark a source as currently speaking (or not). When a source is in
+   * the active scene's feeds, a pulsing live-green stroke is drawn over
+   * its slot rect. Completely idempotent; cheap enough to call at 60Hz.
+   */
+  updateSourceSpeaking(id: SourceId, speaking: boolean): void;
   getOutputTrack(): MediaStreamTrack | null;
   getOutputStream(): MediaStream | null;
   destroy(): void;
@@ -75,13 +81,22 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
   let destroyed = false;
 
   // Scene graph layers (z-order matters):
-  //   background -> feeds -> overlays
+  //   background -> feeds -> speaking rings -> overlays
   const background = new Graphics();
   const feedsLayer = new Container();
+  const speakingLayer = new Container();
   const overlaysLayer = new Container();
 
   const sources = new Map<SourceId, MountedSource>();
   let currentScene: Scene | null = null;
+
+  // Sources currently flagged as "speaking". We keep this as a Set
+  // (source identity) rather than a map of rings because the ring's
+  // rect is derived from the current scene — scene changes rebuild the
+  // rings from this set. This way, toggling speaking in the middle of
+  // a scene recompute is cheap and idempotent.
+  const speaking = new Set<SourceId>();
+  const speakingRings = new Map<SourceId, Graphics>();
 
   // Output track cache — canvas.captureStream is stable per-canvas, so we
   // create one stream and reuse its track.
@@ -103,7 +118,7 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
       .rect(0, 0, settings.width, settings.height)
       .fill({ color: settings.background });
 
-    app.stage.addChild(background, feedsLayer, overlaysLayer);
+    app.stage.addChild(background, feedsLayer, speakingLayer, overlaysLayer);
 
     // canvas.captureStream is available on HTMLCanvasElement.
     // Pixi's canvas IS an HTMLCanvasElement (not an OffscreenCanvas) because
@@ -183,6 +198,10 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
       feedsLayer.addChild(mounted.sprite);
     }
 
+    // Rebuild the speaking-ring layer for any source currently flagged
+    // as speaking AND present in this scene's feeds.
+    rebuildSpeakingRings();
+
     // Rebuild overlays layer.
     overlaysLayer.removeChildren();
     for (const overlay of scene.overlays) {
@@ -190,6 +209,74 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
       const node = createOverlayNode(overlay, settings);
       if (node) overlaysLayer.addChild(node);
     }
+  }
+
+  function rebuildSpeakingRings(): void {
+    // Tear down all existing rings; rebuild from `speaking` set.
+    for (const ring of speakingRings.values()) ring.destroy();
+    speakingRings.clear();
+    speakingLayer.removeChildren();
+    if (!currentScene) return;
+    const rects = computeSlots(
+      currentScene.layout,
+      settings.width,
+      settings.height,
+    );
+    const slotCount = getSlotCount(currentScene.layout);
+    for (let i = 0; i < slotCount; i++) {
+      const sourceId = currentScene.feeds[i] ?? null;
+      if (!sourceId) continue;
+      if (!speaking.has(sourceId)) continue;
+      const rect = rects[i];
+      if (!rect) continue;
+      const ring = buildSpeakingRing(rect);
+      speakingLayer.addChild(ring);
+      speakingRings.set(sourceId, ring);
+    }
+  }
+
+  function updateSourceSpeaking(id: SourceId, isSpeaking: boolean): void {
+    if (isSpeaking) {
+      if (speaking.has(id)) return;
+      speaking.add(id);
+    } else {
+      if (!speaking.has(id)) return;
+      speaking.delete(id);
+    }
+    // Fast path: add/remove a single ring without rebuilding the layer.
+    if (!currentScene) return;
+    const rects = computeSlots(
+      currentScene.layout,
+      settings.width,
+      settings.height,
+    );
+    const slotCount = getSlotCount(currentScene.layout);
+    for (let i = 0; i < slotCount; i++) {
+      if (currentScene.feeds[i] !== id) continue;
+      const rect = rects[i];
+      if (!rect) return;
+      const existing = speakingRings.get(id);
+      if (isSpeaking) {
+        if (existing) return;
+        const ring = buildSpeakingRing(rect);
+        speakingLayer.addChild(ring);
+        speakingRings.set(id, ring);
+      } else {
+        if (!existing) return;
+        existing.destroy();
+        speakingRings.delete(id);
+      }
+      return;
+    }
+  }
+
+  function buildSpeakingRing(rect: { x: number; y: number; width: number; height: number }): Graphics {
+    // 3px live-green stroke inset 1px from the slot so it sits on top
+    // of the source sprite without clipping outside the slot.
+    const inset = 2;
+    return new Graphics()
+      .rect(rect.x + inset, rect.y + inset, rect.width - inset * 2, rect.height - inset * 2)
+      .stroke({ color: 0x22a559, width: 3, alignment: 1 });
   }
 
   function setScene(scene: Scene): void {
@@ -229,6 +316,7 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
     addSource,
     removeSource,
     setScene,
+    updateSourceSpeaking,
     getOutputTrack,
     getOutputStream,
     destroy,

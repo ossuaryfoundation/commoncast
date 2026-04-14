@@ -38,12 +38,21 @@ export interface AudioMixerSourceOptions {
   muted?: boolean;
 }
 
+/** Uint8Array<ArrayBuffer> — the concrete type AnalyserNode reads into. */
+type ByteBuffer = Uint8Array<ArrayBuffer>;
+
+function makeByteBuffer(size: number): ByteBuffer {
+  return new Uint8Array(new ArrayBuffer(size)) as ByteBuffer;
+}
+
 interface MixerSource {
   track: MediaStreamTrack;
   /** Held to prevent GC of the single-track MediaStream the source reads. */
   stream: MediaStream;
   source: MediaStreamAudioSourceNode;
   gain: GainNode;
+  analyser: AnalyserNode;
+  analyserData: ByteBuffer;
   gainValue: number;
   muted: boolean;
 }
@@ -52,6 +61,8 @@ export class AudioMixer {
   private readonly ctx: AudioContext;
   private readonly master: GainNode;
   private readonly destination: MediaStreamAudioDestinationNode;
+  private readonly masterAnalyser: AnalyserNode;
+  private readonly masterAnalyserData: ByteBuffer;
   private readonly sources = new Map<string, MixerSource>();
   private destroyed = false;
 
@@ -61,6 +72,15 @@ export class AudioMixer {
     this.master.gain.value = 1;
     this.destination = this.ctx.createMediaStreamDestination();
     this.master.connect(this.destination);
+
+    // Branch the master output into an analyser node that does not feed
+    // the destination — so reading the meter never double-sums or taps
+    // into the outgoing audio stream itself.
+    this.masterAnalyser = this.ctx.createAnalyser();
+    this.masterAnalyser.fftSize = 512;
+    this.masterAnalyser.smoothingTimeConstant = 0.4;
+    this.master.connect(this.masterAnalyser);
+    this.masterAnalyserData = makeByteBuffer(this.masterAnalyser.fftSize);
   }
 
   /** Resume the context if it's been suspended by the autoplay policy. */
@@ -101,11 +121,21 @@ export class AudioMixer {
     source.connect(gain);
     gain.connect(this.master);
 
+    // Per-source analyser branches off the post-gain node so the level
+    // reflects what the user actually hears in the mix (mute → 0, gain
+    // reduction → lower reading).
+    const analyser = this.ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.4;
+    gain.connect(analyser);
+
     this.sources.set(id, {
       track,
       stream,
       source,
       gain,
+      analyser,
+      analyserData: makeByteBuffer(analyser.fftSize),
       gainValue: initialGain,
       muted,
     });
@@ -124,7 +154,26 @@ export class AudioMixer {
     } catch {
       // ignore
     }
+    try {
+      s.analyser.disconnect();
+    } catch {
+      // ignore
+    }
     this.sources.delete(id);
+  }
+
+  /** RMS 0..1 level for a specific source. Returns 0 for unknown ids. */
+  getSourceLevel(id: string): number {
+    const s = this.sources.get(id);
+    if (!s) return 0;
+    s.analyser.getByteTimeDomainData(s.analyserData);
+    return computeRms(s.analyserData);
+  }
+
+  /** RMS 0..1 level for the final mix. */
+  getMasterLevel(): number {
+    this.masterAnalyser.getByteTimeDomainData(this.masterAnalyserData);
+    return computeRms(this.masterAnalyserData);
   }
 
   setGain(id: string, gain: number): void {
@@ -171,6 +220,11 @@ export class AudioMixer {
     this.destroyed = true;
     for (const id of Array.from(this.sources.keys())) this.removeSource(id);
     try {
+      this.masterAnalyser.disconnect();
+    } catch {
+      // ignore
+    }
+    try {
       this.master.disconnect();
     } catch {
       // ignore
@@ -179,4 +233,14 @@ export class AudioMixer {
       void this.ctx.close().catch(() => {});
     }
   }
+}
+
+function computeRms(data: ByteBuffer): number {
+  let sum = 0;
+  const n = data.length;
+  for (let i = 0; i < n; i++) {
+    const v = (data[i]! - 128) / 128;
+    sum += v * v;
+  }
+  return Math.sqrt(sum / n);
 }

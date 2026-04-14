@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { StatusBarIndicator } from "@commoncast/design-system";
+import { StatusBarIndicator, VUMeter } from "@commoncast/design-system";
 import { useStudioContext } from "~/composables/useStudioContext";
 import { usePrefsStore } from "~/stores/prefs";
 import { useNuxtApp } from "#app";
@@ -97,6 +97,21 @@ const recIndicator = computed<{ status: IndicatorStatus; value: string }>(() => 
       label="Rec"
       :value="recIndicator.value"
     />
+
+    <!-- Master output level pill -->
+    <div class="flex items-center gap-2">
+      <span class="font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-ghost)]">
+        Mix
+      </span>
+      <div class="w-[72px]">
+        <VUMeter
+          :level="ctx.hostMixer.masterLevel.value"
+          :peak="ctx.hostMixer.masterPeak.value"
+          :height="5"
+        />
+      </div>
+    </div>
+
     <span class="ml-auto font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-ghost)]">
       commoncast v0.0.0
     </span>

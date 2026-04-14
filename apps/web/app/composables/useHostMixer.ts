@@ -28,11 +28,22 @@ export interface HostMixerSource {
   kind: "local" | "peer" | "other";
 }
 
+export interface MixerLevels {
+  level: number;
+  peak: number;
+}
+
 export interface UseHostMixerReturn {
   /** The underlying mixer instance. Exposed for advanced callers. */
   readonly mixer: ShallowRef<AudioMixer | null>;
   /** List of live sources, in insertion order. */
   readonly sources: Ref<HostMixerSource[]>;
+  /** Per-source RMS + decaying-peak levels, keyed by source id. */
+  readonly levels: Ref<Record<string, MixerLevels>>;
+  /** RMS level of the final mix (0..1). */
+  readonly masterLevel: Ref<number>;
+  /** Decaying peak of the final mix (0..1). */
+  readonly masterPeak: Ref<number>;
   /** Mixed output audio track (stable identity across source changes). */
   readonly outputTrack: Ref<MediaStreamTrack | null>;
   readonly outputStream: ShallowRef<MediaStream | null>;
@@ -54,14 +65,50 @@ export function useHostMixer(): UseHostMixerReturn {
   const sources = ref<HostMixerSource[]>([]);
   const outputTrack = ref<MediaStreamTrack | null>(null);
   const outputStream = shallowRef<MediaStream | null>(null);
+  const levels = ref<Record<string, MixerLevels>>({});
+  const masterLevel = ref(0);
+  const masterPeak = ref(0);
+  let rafHandle = 0;
 
   function ensureMixer(): AudioMixer {
     if (!mixer.value) {
       mixer.value = new AudioMixer();
       outputStream.value = mixer.value.outputStream();
       outputTrack.value = mixer.value.outputTrack();
+      startLevelLoop();
     }
     return mixer.value;
+  }
+
+  function startLevelLoop() {
+    if (rafHandle || typeof window === "undefined") return;
+    const tick = () => {
+      const m = mixer.value;
+      if (!m) {
+        rafHandle = 0;
+        return;
+      }
+      const next: Record<string, MixerLevels> = {};
+      for (const row of sources.value) {
+        const prev = levels.value[row.id];
+        const lv = m.getSourceLevel(row.id);
+        const pk = Math.max((prev?.peak ?? 0) * 0.94, lv);
+        next[row.id] = { level: lv, peak: pk };
+      }
+      levels.value = next;
+      const ml = m.getMasterLevel();
+      masterLevel.value = ml;
+      masterPeak.value = Math.max(masterPeak.value * 0.94, ml);
+      rafHandle = requestAnimationFrame(tick);
+    };
+    rafHandle = requestAnimationFrame(tick);
+  }
+
+  function stopLevelLoop() {
+    if (rafHandle) {
+      cancelAnimationFrame(rafHandle);
+      rafHandle = 0;
+    }
   }
 
   function syncSources() {
@@ -140,15 +187,20 @@ export function useHostMixer(): UseHostMixerReturn {
   }
 
   onScopeDispose(() => {
+    stopLevelLoop();
     mixer.value?.destroy();
     mixer.value = null;
     outputTrack.value = null;
     outputStream.value = null;
     sources.value = [];
+    levels.value = {};
+    masterLevel.value = 0;
+    masterPeak.value = 0;
   });
 
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {
+      stopLevelLoop();
       mixer.value?.destroy();
       mixer.value = null;
     });
@@ -168,6 +220,9 @@ export function useHostMixer(): UseHostMixerReturn {
   return {
     mixer,
     sources,
+    levels,
+    masterLevel,
+    masterPeak,
     outputTrack,
     outputStream,
     addSource,
