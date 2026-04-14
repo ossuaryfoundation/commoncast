@@ -23,11 +23,13 @@ import {
   type Destination,
 } from "~/stores/destinations";
 import type { BroadcastSenderState } from "~/composables/broadcastSender";
+import { useConfirm } from "~/composables/useConfirm";
 
 const model = defineModel<boolean>("open", { default: false });
 
 const ctx = useStudioContext();
 const store = useDestinationsStore();
+const confirm = useConfirm();
 
 const newName = ref("");
 const newAddr = ref("");
@@ -86,7 +88,15 @@ function toggleAuto(dest: Destination, next: boolean) {
   store.update(dest.id, { auto: next });
 }
 
-function removeDest(dest: Destination) {
+async function removeDest(dest: Destination) {
+  const ok = await confirm.ask({
+    title: `Remove "${dest.name}"?`,
+    description:
+      "The destination will be removed from the studio. Active broadcasts to this target will stop immediately.",
+    confirmLabel: "Remove",
+    danger: true,
+  });
+  if (!ok) return;
   store.remove(dest.id);
 }
 </script>

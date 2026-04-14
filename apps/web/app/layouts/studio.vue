@@ -6,6 +6,7 @@
 import ToastStack from "~/components/ToastStack.vue";
 import CommandPaletteMount from "~/components/CommandPaletteMount.vue";
 import ShortcutsDialog from "~/components/ShortcutsDialog.vue";
+import ConfirmMount from "~/components/ConfirmMount.vue";
 </script>
 
 <template>
@@ -14,5 +15,6 @@ import ShortcutsDialog from "~/components/ShortcutsDialog.vue";
     <ToastStack />
     <CommandPaletteMount />
     <ShortcutsDialog />
+    <ConfirmMount />
   </div>
 </template>

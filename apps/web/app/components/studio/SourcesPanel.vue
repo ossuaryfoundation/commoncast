@@ -37,11 +37,13 @@ import { useStudioContext } from "~/composables/useStudioContext";
 import { useStudioStore } from "~/stores/studio";
 import { useParticipantsStore, type StudioParticipant } from "~/stores/participants";
 import { usePrefsStore } from "~/stores/prefs";
+import { useConfirm } from "~/composables/useConfirm";
 
 const ctx = useStudioContext();
 const studio = useStudioStore();
 const participantsStore = useParticipantsStore();
 const prefs = usePrefsStore();
+const confirm = useConfirm();
 
 const cameraItems = computed<SelectItem[]>(() => [
   { value: "", label: "System default" },
@@ -182,9 +184,18 @@ async function handleMenu(p: StudioParticipant, action: string) {
     case "camera-on":
       await part.setCameraOff(p.pid, false);
       break;
-    case "kick":
+    case "kick": {
+      const ok = await confirm.ask({
+        title: `Remove ${p.name} from the studio?`,
+        description:
+          "They'll be disconnected from the room immediately. They can rejoin with the invite link.",
+        confirmLabel: "Remove",
+        danger: true,
+      });
+      if (!ok) return;
       await part.kick(p.pid);
       break;
+    }
   }
 }
 

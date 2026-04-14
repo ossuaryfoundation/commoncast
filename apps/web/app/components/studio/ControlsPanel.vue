@@ -28,10 +28,11 @@ import {
   type MenuItem,
 } from "@commoncast/design-system";
 import { useStudioStore } from "~/stores/studio";
-import AudioMixerStrip from "~/components/studio/AudioMixerStrip.vue";
 import ChatPanel from "~/components/studio/ChatPanel.vue";
+import { useConfirm } from "~/composables/useConfirm";
 
 const studio = useStudioStore();
+const confirm = useConfirm();
 
 // ─── scene editor state ─────────────────────────────────────────
 const editingSceneId = ref<string | null>(null);
@@ -74,7 +75,7 @@ function sceneMenuItems(sceneId: string): MenuItem[] {
   ];
 }
 
-function handleSceneMenu(sceneId: string, action: string) {
+async function handleSceneMenu(sceneId: string, action: string) {
   const scene = studio.scenes.find((s) => s.id === sceneId);
   if (!scene) return;
   switch (action) {
@@ -84,15 +85,24 @@ function handleSceneMenu(sceneId: string, action: string) {
     case "duplicate":
       studio.duplicateScene(sceneId);
       break;
-    case "delete":
+    case "delete": {
+      const ok = await confirm.ask({
+        title: `Delete "${scene.name}"?`,
+        description:
+          "This scene will be removed from the studio. Source bindings on other scenes are unaffected.",
+        confirmLabel: "Delete scene",
+        danger: true,
+      });
+      if (!ok) return;
       studio.removeScene(sceneId);
       break;
+    }
   }
 }
 
+// Audio moved to the always-on bottom mixer dock in H3a — no more tab.
 const tabs = [
   { id: "layout", label: "Layout" },
-  { id: "audio", label: "Audio" },
   { id: "overlays", label: "Overlays" },
   { id: "scenes", label: "Scenes" },
   { id: "brand", label: "Brand" },
@@ -143,11 +153,6 @@ const overlayState = computed(() => ({
             @select="studio.setLayout(l.id)"
           />
         </div>
-      </div>
-
-      <!-- Audio mixer -->
-      <div v-else-if="activeTab === 'audio'">
-        <AudioMixerStrip />
       </div>
 
       <!-- Overlays (per scene) -->
