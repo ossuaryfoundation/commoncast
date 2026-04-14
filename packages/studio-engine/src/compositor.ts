@@ -103,6 +103,16 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
   // create one stream and reuse its track.
   let outputStream: MediaStream | null = null;
 
+  /**
+   * Per-frame update hooks for overlays that animate (the ticker
+   * scrolls, future overlays like countdown timers / chat banners
+   * will hook here too). Keyed by the overlay Container so
+   * applyScene() can drop hooks cleanly when it tears down the
+   * overlaysLayer. Each function receives the deltaMS since the
+   * last frame so motion is frame-rate independent.
+   */
+  const overlayUpdates = new Map<Container, (deltaMs: number) => void>();
+
   async function init(): Promise<void> {
     if (initialized) return;
     await app.init({
@@ -121,12 +131,26 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
 
     app.stage.addChild(background, feedsLayer, speakingLayer, overlaysLayer);
 
+    // Register the per-frame overlay update tick. Pixi calls this
+    // every render tick; we forward deltaMS to every registered
+    // overlay update so ticker scrolls, countdown timers, etc. can
+    // move frame-rate independently.
+    app.ticker.add(onTick);
+
     // canvas.captureStream is available on HTMLCanvasElement.
     // Pixi's canvas IS an HTMLCanvasElement (not an OffscreenCanvas) because
     // we passed one in explicitly above.
     outputStream = canvas.captureStream(settings.fps);
 
     initialized = true;
+  }
+
+  function onTick(ticker: { deltaMS: number }): void {
+    if (destroyed) return;
+    const dt = ticker.deltaMS;
+    for (const update of overlayUpdates.values()) {
+      update(dt);
+    }
   }
 
   async function addSource(source: SourceSpec): Promise<void> {
@@ -203,12 +227,17 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
     // as speaking AND present in this scene's feeds.
     rebuildSpeakingRings();
 
-    // Rebuild overlays layer.
+    // Rebuild overlays layer. First tear down any animated-overlay
+    // update hooks from the previous scene so we don't leak frame
+    // updates from stale containers.
+    overlayUpdates.clear();
     overlaysLayer.removeChildren();
     for (const overlay of scene.overlays) {
       if (!overlay.visible) continue;
-      const node = createOverlayNode(overlay, settings);
-      if (node) overlaysLayer.addChild(node);
+      const built = createOverlayNode(overlay, settings);
+      if (!built) continue;
+      overlaysLayer.addChild(built.container);
+      if (built.update) overlayUpdates.set(built.container, built.update);
     }
   }
 
@@ -297,6 +326,15 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
     if (destroyed) return;
     destroyed = true;
 
+    // Detach overlay update hooks before tearing down the app so we
+    // don't fire updates against destroyed containers.
+    overlayUpdates.clear();
+    try {
+      app.ticker.remove(onTick);
+    } catch {
+      // Ticker may have already been disposed by app.destroy — ignore.
+    }
+
     for (const [, mounted] of sources) {
       mounted.camera?.stop();
       mounted.sprite.destroy({ children: true });
@@ -326,10 +364,21 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
 
 // ---- overlays --------------------------------------------------------------
 
+/**
+ * An overlay build result. `container` is added to the overlay layer
+ * by applyScene(); `update`, if present, is registered as a per-frame
+ * hook that receives deltaMS since the last Pixi tick. Used by the
+ * ticker (right-to-left scroll) and any future animated overlay.
+ */
+interface OverlayBuild {
+  container: Container;
+  update?: (deltaMs: number) => void;
+}
+
 function createOverlayNode(
   overlay: OverlaySpec,
   settings: CompositorSettings,
-): Container | null {
+): OverlayBuild | null {
   switch (overlay.kind) {
     case "logo":
       return createLogoNode(overlay, settings);
@@ -342,7 +391,10 @@ function createOverlayNode(
   }
 }
 
-function createLogoNode(spec: LogoOverlaySpec, settings: CompositorSettings): Container {
+function createLogoNode(
+  spec: LogoOverlaySpec,
+  settings: CompositorSettings,
+): OverlayBuild {
   const c = new Container();
   const bg = new Graphics()
     .roundRect(0, 0, 180, 36, 2)
@@ -362,13 +414,13 @@ function createLogoNode(spec: LogoOverlaySpec, settings: CompositorSettings): Co
   c.addChild(bg, dot, label);
   c.x = settings.width - 180 - 24;
   c.y = 24;
-  return c;
+  return { container: c };
 }
 
 function createLowerThirdNode(
   spec: LowerThirdOverlaySpec,
   settings: CompositorSettings,
-): Container {
+): OverlayBuild {
   const c = new Container();
   const accentBar = new Graphics().rect(0, 0, 4, 72).fill({ color: spec.accent });
   const panel = new Graphics()
@@ -399,37 +451,77 @@ function createLowerThirdNode(
   c.addChild(accentBar, panel, name, sub);
   c.x = 32;
   c.y = settings.height - 72 - 48;
-  return c;
+  return { container: c };
 }
 
 function createTickerNode(
   spec: TickerOverlaySpec,
   settings: CompositorSettings,
-): Container {
+): OverlayBuild {
+  const BAR_HEIGHT = 36;
+  const SCROLL_SPEED_PX_PER_SEC = 80;
+  // A gap between repeats so the text doesn't smear into itself when
+  // the message is shorter than the screen.
+  const REPEAT_GAP = 120;
+
   const c = new Container();
   const bg = new Graphics()
-    .rect(0, 0, settings.width, 36)
+    .rect(0, 0, settings.width, BAR_HEIGHT)
     .fill({ color: spec.accent });
-  const text = new Text({
-    text: spec.text,
-    style: {
-      fontFamily: "DM Mono, monospace",
-      fontSize: 14,
-      fill: "#ffffff",
-      letterSpacing: 2,
-    },
-  });
-  text.x = 24;
-  text.y = 9;
-  c.addChild(bg, text);
-  c.y = settings.height - 36;
-  return c;
+
+  // Render the text twice so we can wrap seamlessly: as soon as the
+  // primary text has scrolled fully off the left edge, we reset it to
+  // the right of the secondary text and swap roles. A single Text
+  // node with wrap-to-right also works, but two nodes render without
+  // any visible "jump" at the wrap point.
+  const makeText = () =>
+    new Text({
+      text: spec.text,
+      style: {
+        fontFamily: "DM Mono, monospace",
+        fontSize: 14,
+        fill: "#ffffff",
+        letterSpacing: 2,
+      },
+    });
+
+  const primary = makeText();
+  const secondary = makeText();
+  primary.y = 9;
+  secondary.y = 9;
+
+  // Start the primary text at the left edge so the ticker has
+  // something to show immediately; secondary sits one full stride
+  // to the right, pre-queued to take over.
+  primary.x = 24;
+  // text.width is measured lazily — force it by accessing now.
+  const stride = Math.max(primary.width + REPEAT_GAP, settings.width + REPEAT_GAP);
+  secondary.x = primary.x + stride;
+
+  c.addChild(bg, primary, secondary);
+  c.y = settings.height - BAR_HEIGHT;
+
+  const update = (deltaMs: number) => {
+    const dx = (SCROLL_SPEED_PX_PER_SEC * deltaMs) / 1000;
+    primary.x -= dx;
+    secondary.x -= dx;
+    // When a text fully scrolls past the left edge, reset it to one
+    // stride past the trailing one so we get a seamless loop.
+    if (primary.x + primary.width < 0) {
+      primary.x = secondary.x + stride;
+    }
+    if (secondary.x + secondary.width < 0) {
+      secondary.x = primary.x + stride;
+    }
+  };
+
+  return { container: c, update };
 }
 
 function createChatBannerNode(
   spec: ChatBannerOverlaySpec,
   settings: CompositorSettings,
-): Container {
+): OverlayBuild {
   const WIDTH = 600;
   const HEIGHT = 72;
   const PADDING_X = 20;
@@ -488,5 +580,5 @@ function createChatBannerNode(
   c.addChild(accentBar, panel, nameText, platformPill, body);
   c.x = Math.round((settings.width - WIDTH) / 2);
   c.y = 48;
-  return c;
+  return { container: c };
 }
