@@ -20,9 +20,11 @@ import { computed, nextTick, ref, watch } from "vue";
 import { ChatMessage as ChatMessageRow } from "@commoncast/design-system";
 import { useStudioContext } from "~/composables/useStudioContext";
 import { useChatStore } from "~/stores/chat";
+import { useToasts } from "~/composables/useToasts";
 
 const ctx = useStudioContext();
 const store = useChatStore();
+const toasts = useToasts();
 
 const list = computed(() => store.list);
 const featured = computed(() => store.featured);
@@ -58,11 +60,17 @@ watch(
 async function send() {
   const text = draft.value.trim();
   if (!text) return;
+  const originalDraft = draft.value;
   draft.value = "";
   try {
     await ctx.chat.sendMessage(text);
   } catch (err) {
-    console.error("[commoncast] chat send failed", err);
+    // Restore the draft so the user doesn't lose what they typed
+    draft.value = originalDraft;
+    toasts.error({
+      title: "Message didn't send",
+      description: (err as Error).message || "Network or relay error",
+    });
   }
   stickyBottom.value = true;
   await scrollToBottomIfSticky();
@@ -72,14 +80,20 @@ async function featureMessage(id: string) {
   try {
     await ctx.chat.featureMessage(id);
   } catch (err) {
-    console.error("[commoncast] feature failed", err);
+    toasts.error({
+      title: "Couldn't feature message",
+      description: (err as Error).message,
+    });
   }
 }
 async function clearFeatured() {
   try {
     await ctx.chat.clearFeatured();
   } catch (err) {
-    console.error("[commoncast] clear featured failed", err);
+    toasts.error({
+      title: "Couldn't clear featured message",
+      description: (err as Error).message,
+    });
   }
 }
 </script>

@@ -21,6 +21,8 @@ export { default as Select } from "./primitives/Select.vue";
 export type { SelectItem } from "./primitives/Select.vue";
 export { default as Slider } from "./primitives/Slider.vue";
 export { default as StatusDot } from "./primitives/StatusDot.vue";
+export { default as Toast } from "./primitives/Toast.vue";
+export type { ToastKind } from "./primitives/Toast.vue";
 export { default as Tabs } from "./primitives/Tabs.vue";
 export { default as Toggle } from "./primitives/Toggle.vue";
 export { default as VUMeter } from "./primitives/VUMeter.vue";

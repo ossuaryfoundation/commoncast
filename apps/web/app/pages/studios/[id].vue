@@ -37,6 +37,7 @@ import { useStudioParticipants } from "~/composables/useStudioParticipants";
 import { useStudioChat } from "~/composables/useStudioChat";
 import { useHostMixer } from "~/composables/useHostMixer";
 import { useStageSelection } from "~/composables/useStageSelection";
+import { useToasts } from "~/composables/useToasts";
 import { useScreenCapture } from "~/composables/useScreenCapture";
 import { useAudioLevels } from "~/composables/useAudioLevels";
 import { useMediaDevices } from "~/composables/useMediaDevices";
@@ -58,6 +59,7 @@ const prefs = usePrefsStore();
 const participantsStore = useParticipantsStore();
 const destinationsStore = useDestinationsStore();
 destinationsStore.seedDefaults();
+const toasts = useToasts();
 const route = useRoute();
 const router = useRouter();
 studio.studioId = String(route.params.id ?? "default");
@@ -98,7 +100,29 @@ async function startLocalMedia() {
     await media.start(buildConstraints());
     await devices.refresh();
   } catch (err) {
-    console.warn("[commoncast] getUserMedia failed", err);
+    const e = err as Error;
+    if (e.name === "NotAllowedError") {
+      toasts.error({
+        title: "Camera & microphone access denied",
+        description:
+          "Click the camera icon in your browser's address bar, grant permission for this site, then retry.",
+        action: { label: "Retry", onClick: () => void startLocalMedia() },
+        timeout: 0,
+      });
+    } else if (e.name === "NotFoundError" || e.name === "OverconstrainedError") {
+      toasts.error({
+        title: "No camera or microphone found",
+        description:
+          "We couldn't find a matching device. Try picking another one in the People panel.",
+        action: { label: "Retry", onClick: () => void startLocalMedia() },
+      });
+    } else {
+      toasts.error({
+        title: "Couldn't start camera & mic",
+        description: e.message || "Unknown error",
+        action: { label: "Retry", onClick: () => void startLocalMedia() },
+      });
+    }
   }
 }
 
@@ -469,14 +493,36 @@ watch(
       await hostMixer.resume();
       const stream = buildOutputStream();
       if (!stream) {
-        console.warn("[commoncast] broadcast: output stream not ready");
+        toasts.warn({
+          title: "Output stream not ready",
+          description: "Wait for the engine to initialize, then try again.",
+        });
+        studio.isLive = false;
+        return;
+      }
+      if (destinationsStore.autoList.length === 0) {
+        toasts.warn({
+          title: "No destinations enabled",
+          description: "Open the Destinations drawer in the toolbar and mark at least one as Auto.",
+        });
         studio.isLive = false;
         return;
       }
       try {
         await fanout.goAll(studio.studioId, stream);
       } catch (err) {
-        console.error("[commoncast] fanout goAll failed", err);
+        const e = err as Error;
+        toasts.error({
+          title: "Couldn't go live",
+          description: e.message || "See console for details.",
+          action: {
+            label: "Retry",
+            onClick: () => {
+              studio.isLive = false;
+              studio.isLive = true;
+            },
+          },
+        });
         studio.isLive = false;
       }
     } else {
@@ -492,17 +538,35 @@ watch(
       await hostMixer.resume();
       const stream = buildOutputStream();
       if (!stream) {
-        console.warn("[commoncast] record: output stream not ready");
+        toasts.warn({
+          title: "Output stream not ready",
+          description: "Wait for the engine to initialize, then try again.",
+        });
         studio.isRecording = false;
         return;
       }
-      recorder.start(stream);
+      try {
+        recorder.start(stream);
+      } catch (err) {
+        toasts.error({
+          title: "Couldn't start recording",
+          description: (err as Error).message || "Unknown error",
+        });
+        studio.isRecording = false;
+      }
     } else if (
       recorder.state.value === "recording" ||
       recorder.state.value === "paused"
     ) {
       const blob = await recorder.stop();
-      if (blob) downloadBlob(blob, `commoncast-${Date.now()}.webm`);
+      if (blob) {
+        const filename = `commoncast-${Date.now()}.webm`;
+        downloadBlob(blob, filename);
+        toasts.success({
+          title: "Recording saved",
+          description: filename,
+        });
+      }
     }
   },
 );
@@ -555,8 +619,25 @@ const screenFacade = {
   async start() {
     try {
       await screen.start();
-    } catch {
-      // user cancelled — ignore
+    } catch (err) {
+      const e = err as Error;
+      // Browsers use NotAllowedError for BOTH "denied" AND "picker cancelled"
+      // — distinguishing via the `message` string is a best-effort heuristic.
+      const wasCancelled =
+        e.name === "NotAllowedError" &&
+        /permission denied by system|cancell|abort/i.test(e.message || "");
+      if (!wasCancelled && e.name !== "NotAllowedError") {
+        toasts.error({
+          title: "Screen share failed",
+          description: e.message || "Unknown error",
+        });
+      } else if (e.name === "NotAllowedError" && !wasCancelled) {
+        toasts.warn({
+          title: "Screen share denied",
+          description: "Your browser or OS blocked screen capture.",
+        });
+      }
+      // Cancellations stay silent — user hit cancel on the picker on purpose.
     }
   },
   stop() {
@@ -584,12 +665,22 @@ const ctx: StudioContext = {
   audioPeak,
   localSourceId,
   screenSourceId,
+  requestMedia: startLocalMedia,
   switchCamera,
   switchMic,
   assignToSelectedSlot,
   labelForSource,
 };
 provideStudioContext(ctx);
+
+// Drive the stage edit/operate mode from studio.isLive. Users can still
+// override manually via the Edit/Operate toggle in the stage header.
+watch(
+  () => studio.isLive,
+  (live) => {
+    selection.setMode(live ? "operate" : "edit");
+  },
+);
 
 // ─── lifecycle ─────────────────────────────────────────────────────
 onMounted(async () => {
@@ -598,7 +689,23 @@ onMounted(async () => {
   try {
     await peers.join(myName);
   } catch (err) {
-    console.error("[commoncast] peers.join failed", err);
+    toasts.error({
+      title: "Couldn't join the studio",
+      description:
+        "We couldn't connect to the clasp relay. Check your network or change the relay URL in Settings.",
+      action: {
+        label: "Retry",
+        onClick: async () => {
+          try {
+            await peers.join(myName);
+            toasts.success({ title: "Reconnected" });
+          } catch {
+            /* toast already up */
+          }
+        },
+      },
+      timeout: 0,
+    });
   }
 });
 

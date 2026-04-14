@@ -37,7 +37,7 @@ const stage = computed(() => {
 
 <template>
   <div
-    class="relative w-full overflow-hidden border border-[color:var(--cc-border)] bg-[var(--cc-chalk-deep)]"
+    class="relative w-full overflow-hidden border border-[color:var(--cc-border-strong)] bg-[var(--cc-ink-whisper)]"
     :style="{ height: `${height}px` }"
     role="meter"
     :aria-valuenow="levelPct"
@@ -45,7 +45,7 @@ const stage = computed(() => {
     aria-valuemax="100"
   >
     <div
-      class="absolute inset-y-0 left-0 transition-[width] duration-[80ms] ease-linear"
+      class="absolute inset-y-0 left-0 transition-[width] duration-[100ms] ease-linear"
       :style="{ width: `${levelPct}%` }"
       :class="{
         'bg-[var(--cc-live)]': stage === 'cool',
@@ -55,7 +55,7 @@ const stage = computed(() => {
     />
     <div
       v-if="peak > 0"
-      class="absolute top-0 bottom-0 w-[2px] bg-[var(--cc-ink)] opacity-60"
+      class="absolute top-0 bottom-0 w-[2px] bg-[var(--cc-ink)] opacity-80"
       :style="{ left: `calc(${peakPct}% - 1px)` }"
     />
   </div>

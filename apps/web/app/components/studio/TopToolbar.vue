@@ -1,31 +1,28 @@
 <!--
   Top toolbar — the broadcast command strip.
 
-  Everything here now reads from real state:
-    - Go Live toggles studio.isLive (the page watches that to drive
-      useBroadcastSender); the button label reflects sender.state.
-    - Record toggles studio.isRecording and the duration chip reads
-      recorder.elapsedMs so pausing/recovering is honest.
-    - The destinations chip shows sender.state; the peers chip reads
-      ctx.peers.remotePids.length; the on-air badge only lights when
-      the broadcast is actually connected, not just when the user
-      clicked the button.
-
-  The old hardcoded YT / Twitch / LVQR badges are gone — they'll return
-  as a real multi-destination drawer in a follow-up slice.
+  H1 repair pass:
+    - Destinations chip rebuilt: one button, one hit target, full-opacity
+      StatusDot + clear "N/M live" count, no nested rgba chip-in-chip.
+    - New Copy-invite action: writes /join/{studioId} to clipboard,
+      fires a success toast, lives next to the studio identity.
+    - Studio title is now visible (was buried in the store). Click to
+      rename lands in a future slice; for now it's static text.
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Button, OnAirBadge, Kbd } from "@commoncast/design-system";
+import { Button, OnAirBadge, StatusDot } from "@commoncast/design-system";
 import { useStudioContext } from "~/composables/useStudioContext";
 import { useStudioStore } from "~/stores/studio";
 import { useDestinationsStore } from "~/stores/destinations";
 import { useTimecode } from "~/composables/useTimecode";
+import { useToasts } from "~/composables/useToasts";
 import DestinationsDrawer from "~/components/studio/DestinationsDrawer.vue";
 
 const ctx = useStudioContext();
 const studio = useStudioStore();
 const destinationsStore = useDestinationsStore();
+const toasts = useToasts();
 const live = useTimecode();
 
 const destinationsOpen = ref(false);
@@ -81,35 +78,55 @@ const recVariant = computed<"primary" | "ghost">(() =>
   recorderState.value === "recording" ? "primary" : "ghost",
 );
 
-// Destinations chip — aggregate of the whole fanout. Click opens the
-// destinations drawer where individual rows can be edited/toggled.
-const destChip = computed(() => {
+// Destinations: one aggregate status + one clean "connected/total" label.
+type DestTone = "live" | "caution" | "signal" | "offline";
+const destTone = computed<DestTone>(() => {
   const s = senderState.value;
-  const label =
-    s === "connected"
-      ? `${connectedCount.value}/${destCount.value} live`
-      : destCount.value === 0
-        ? "none"
-        : `${destCount.value} configured`;
-  const state: "on" | "pending" | "fail" | "off" =
-    s === "connected"
-      ? "on"
-      : s === "negotiating"
-        ? "pending"
-        : s === "failed"
-          ? "fail"
-          : "off";
-  return { label, state };
+  if (s === "connected") return "live";
+  if (s === "negotiating") return "caution";
+  if (s === "failed") return "signal";
+  return "offline";
 });
+const destCountLabel = computed(() => {
+  if (destCount.value === 0) return "none";
+  if (senderState.value === "connected") {
+    return `${connectedCount.value}/${destCount.value} live`;
+  }
+  return `${destCount.value} ${destCount.value === 1 ? "dest" : "dests"}`;
+});
+
+// Peers chip tone — mirrors destinations styling.
+const peerTone = computed<DestTone>(() =>
+  peerCount.value > 0 ? "live" : "offline",
+);
+
+// Copy-invite action
+async function copyInvite() {
+  if (typeof window === "undefined") return;
+  const url = `${window.location.origin}/join/${studio.studioId}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toasts.success({
+      title: "Invite link copied",
+      description: url,
+    });
+  } catch {
+    toasts.error({
+      title: "Couldn't copy to clipboard",
+      description: "Your browser may have blocked clipboard access.",
+    });
+  }
+}
 </script>
 
 <template>
   <header
     class="flex h-11 items-center gap-3 border-b border-[var(--cc-soot-mid)] bg-[var(--cc-soot)] px-3 text-[var(--cc-chalk)]"
   >
+    <!-- brand + studio identity -->
     <NuxtLink
       to="/"
-      class="flex items-center gap-2 border-r border-[var(--cc-soot-mid)] pr-3 font-display text-[13px] font-bold tracking-[0.02em]"
+      class="flex items-center gap-2 pr-3 font-display text-[13px] font-bold tracking-[0.02em]"
     >
       <span
         class="h-[7px] w-[7px] bg-[var(--cc-signal)]"
@@ -118,11 +135,37 @@ const destChip = computed(() => {
       commoncast
     </NuxtLink>
 
+    <span
+      class="truncate border-l border-[var(--cc-soot-mid)] pl-3 font-display text-[12px] font-semibold text-[var(--cc-ink-whisper)] max-w-[220px]"
+      :title="studio.title"
+    >
+      {{ studio.title }}
+    </span>
+
+    <!-- Copy invite -->
+    <button
+      type="button"
+      class="flex items-center gap-1.5 border border-[var(--cc-soot-mid)] bg-transparent px-2 py-[4px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-whisper)] transition-colors hover:border-[var(--cc-ink-ghost)] hover:bg-[var(--cc-soot-mid)] hover:text-[var(--cc-chalk)]"
+      aria-label="Copy invite link"
+      title="Copy invite link"
+      @click="copyInvite"
+    >
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+        <rect x="1" y="3" width="8" height="8" stroke="currentColor" stroke-width="1.2" />
+        <path d="M3 3 V1 H11 V9 H9" stroke="currentColor" stroke-width="1.2" fill="none" />
+      </svg>
+      <span>Copy invite</span>
+    </button>
+
+    <span class="mx-1 h-4 w-px bg-[var(--cc-soot-mid)]" />
+
+    <!-- Go live + record -->
     <div class="flex items-center gap-2">
       <Button
         :variant="liveVariant"
         size="sm"
         :disabled="!engineReady && senderState !== 'connected'"
+        :title="!engineReady ? 'Engine is still initializing…' : undefined"
         @click="studio.goLive()"
       >
         {{ liveLabel }}
@@ -131,6 +174,7 @@ const destChip = computed(() => {
         :variant="recVariant"
         size="sm"
         :disabled="!engineReady && recorderState !== 'recording'"
+        :title="!engineReady ? 'Engine is still initializing…' : undefined"
         @click="studio.toggleRecording()"
       >
         <span class="flex items-center gap-1.5">
@@ -144,52 +188,46 @@ const destChip = computed(() => {
       </Button>
     </div>
 
-    <!-- destinations chip (opens the drawer) -->
+    <!-- destinations chip — one button, full contrast -->
     <button
       type="button"
-      class="ml-2 flex items-center gap-2 border border-[rgba(255,255,255,0.1)] px-2 py-[4px] font-ui text-[9px] uppercase tracking-[0.12em] transition-colors hover:border-[rgba(255,255,255,0.25)] hover:bg-[rgba(255,255,255,0.05)]"
-      aria-label="Open destinations drawer"
+      class="ml-1 flex items-center gap-2 border border-[var(--cc-soot-mid)] bg-transparent px-2.5 py-[5px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-chalk)] transition-colors hover:border-[var(--cc-ink-ghost)] hover:bg-[var(--cc-soot-mid)]"
+      :aria-expanded="destinationsOpen"
+      aria-haspopup="dialog"
+      :title="destCount === 0 ? 'Add a destination to go live' : 'Manage destinations'"
       @click="destinationsOpen = true"
     >
-      <span class="text-[rgba(255,255,255,0.45)]">Destinations</span>
+      <StatusDot
+        :status="destTone"
+        :pulse="destTone === 'live'"
+        :size="5"
+      />
+      <span>Destinations</span>
       <span
-        class="flex items-center gap-1 px-1.5 py-[1px]"
-        :class="{
-          'border border-[rgba(34,165,89,0.4)] text-[var(--cc-live)]': destChip.state === 'on',
-          'border border-[rgba(212,148,10,0.4)] text-[var(--cc-caution)]': destChip.state === 'pending',
-          'border border-[rgba(217,66,80,0.4)] text-[var(--cc-signal)]': destChip.state === 'fail',
-          'border border-[rgba(255,255,255,0.1)] text-[rgba(255,255,255,0.3)]': destChip.state === 'off',
-        }"
+        class="border-l border-[var(--cc-soot-mid)] pl-2 tabular-nums text-[var(--cc-ink-whisper)]"
       >
-        <span
-          class="h-[4px] w-[4px]"
-          :class="{
-            'bg-[var(--cc-live)]': destChip.state === 'on',
-            'bg-[var(--cc-caution)]': destChip.state === 'pending',
-            'bg-[var(--cc-signal)]': destChip.state === 'fail',
-            'bg-[rgba(255,255,255,0.2)]': destChip.state === 'off',
-          }"
-        />
-        {{ destChip.label }}
+        {{ destCountLabel }}
       </span>
     </button>
 
     <DestinationsDrawer v-model:open="destinationsOpen" />
 
-    <!-- peers chip -->
+    <!-- peers chip — matches destinations treatment -->
     <div
-      class="flex items-center gap-1.5 font-ui text-[9px] uppercase tracking-[0.12em] text-[rgba(255,255,255,0.45)]"
+      class="flex items-center gap-1.5 border border-[var(--cc-soot-mid)] bg-transparent px-2.5 py-[5px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-chalk)]"
+      :aria-label="`${peerCount} ${peerCount === 1 ? 'peer' : 'peers'} connected`"
     >
-      <span
-        class="h-[4px] w-[4px] rounded-full"
-        :class="peerCount > 0 ? 'bg-[var(--cc-live)]' : 'bg-[rgba(255,255,255,0.2)]'"
+      <StatusDot
+        :status="peerTone"
+        :pulse="peerTone === 'live'"
+        :size="5"
       />
-      {{ peerCount }} {{ peerCount === 1 ? "peer" : "peers" }}
+      <span>{{ peerCount }} {{ peerCount === 1 ? "peer" : "peers" }}</span>
     </div>
 
     <div class="ml-auto flex items-center gap-4">
       <span
-        class="font-code text-[11px] tracking-[0.06em] text-[rgba(255,255,255,0.45)]"
+        class="font-code text-[11px] tracking-[0.06em] tabular-nums text-[var(--cc-ink-whisper)]"
       >
         <template v-if="senderState === 'connected'">
           <span class="text-[var(--cc-live)]">LIVE</span> {{ live.value.value }}

@@ -23,7 +23,7 @@ function toggle() {
     :aria-checked="model"
     :aria-label="ariaLabel"
     :disabled="disabled"
-    class="relative inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-[var(--cc-radius-sm)] border transition-colors duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-snappy)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cc-signal)] disabled:cursor-not-allowed disabled:opacity-50"
+    class="relative inline-flex h-[18px] w-[32px] shrink-0 cursor-pointer items-center rounded-[var(--cc-radius-sm)] border transition-[background-color,border-color] duration-[var(--cc-dur-med)] ease-[var(--cc-ease-smooth)] disabled:cursor-not-allowed disabled:opacity-50"
     :class="
       model
         ? 'border-[var(--cc-live)] bg-[var(--cc-live-dim)]'
@@ -32,7 +32,7 @@ function toggle() {
     @click="toggle"
   >
     <span
-      class="absolute top-[2px] h-[12px] w-[12px] rounded-[var(--cc-radius-sm)] transition-transform duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-snappy)]"
+      class="absolute top-[2px] h-[12px] w-[12px] rounded-[var(--cc-radius-sm)] transition-[transform,background-color] duration-[var(--cc-dur-med)] ease-[var(--cc-ease-smooth)]"
       :class="
         model
           ? 'translate-x-[16px] bg-[var(--cc-live)]'

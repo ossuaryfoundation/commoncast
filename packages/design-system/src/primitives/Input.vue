@@ -29,7 +29,7 @@ defineProps<{
       :placeholder="placeholder"
       :disabled="disabled"
       :style="{ maxWidth }"
-      class="w-full rounded-[var(--cc-radius-md)] border border-[color:var(--cc-border-strong)] bg-[var(--cc-chalk)] px-3 py-2 font-body text-[var(--cc-text-base)] text-[var(--cc-ink)] placeholder:text-[var(--cc-ink-whisper)] focus:border-[var(--cc-signal)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+      class="w-full rounded-[var(--cc-radius-md)] border border-[color:var(--cc-border-strong)] bg-[var(--cc-chalk)] px-3 py-2 font-body text-[var(--cc-text-base)] text-[var(--cc-ink)] placeholder:text-[var(--cc-ink-ghost)] focus:border-[var(--cc-signal)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
     />
   </label>
 </template>

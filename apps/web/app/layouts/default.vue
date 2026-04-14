@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ToastStack from "~/components/ToastStack.vue";
 </script>
 
 <template>
@@ -21,5 +22,6 @@
     <main class="flex-1">
       <slot />
     </main>
+    <ToastStack />
   </div>
 </template>

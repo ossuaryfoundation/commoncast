@@ -156,3 +156,28 @@
     }
   }
 }
+
+/* ───────── Global focus-visible baseline ─────────
+   Every interactive element in commoncast gets a consistent 2px
+   signal-red outline on keyboard focus. Pointer focus stays quiet.
+   Components can opt out or override with their own focus-visible
+   styles, but the default protects every custom <button>/<div
+   role="button">/<a> from slipping through without a ring. */
+
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="switch"]:focus-visible,
+[role="option"]:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--cc-signal);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--cc-signal);
+  outline-offset: 1px;
+}

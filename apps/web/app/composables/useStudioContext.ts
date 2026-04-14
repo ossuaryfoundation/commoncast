@@ -52,6 +52,8 @@ export interface StudioContext {
   readonly localSourceId: string;
   /** Stable source id for our local screen capture feed. */
   readonly screenSourceId: string;
+  /** Kick off (or retry) getUserMedia from a user gesture. Surfaces toasts on failure. */
+  requestMedia(): Promise<void>;
   switchCamera(deviceId: string | null): Promise<void>;
   switchMic(deviceId: string | null): Promise<void>;
   /** Assigns a source into the currently-selected slot, if any. */

@@ -266,7 +266,7 @@ function initialsFor(p: StudioParticipant): string {
         >
           <button
             type="button"
-            class="flex min-w-0 flex-1 items-center gap-3 border border-[color:var(--cc-border)] bg-[var(--cc-chalk)] p-2 text-left transition-[transform,box-shadow,border-color] duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-snappy)] hover:-translate-y-px hover:border-[color:var(--cc-border-strong)] hover:shadow-[var(--cc-shadow-sm)]"
+            class="flex min-w-0 flex-1 items-center gap-3 border border-[color:var(--cc-border)] bg-[var(--cc-chalk)] p-2 text-left transition-[background-color,border-color,box-shadow] duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-smooth)] hover:bg-[var(--cc-chalk-warm)] hover:shadow-[inset_3px_0_0_0_var(--cc-ink)]"
             :class="
               slotOf(sourceIdFor(p)) != null
                 ? p.pid === ctx.myPid
@@ -277,25 +277,22 @@ function initialsFor(p: StudioParticipant): string {
             @click="bindIfSlotSelected(sourceIdFor(p))"
           >
             <span
-              class="relative flex h-7 w-7 shrink-0 items-center justify-center font-display text-[10px] font-bold tracking-[0.04em]"
-              :class="
+              class="relative flex h-7 w-7 shrink-0 items-center justify-center font-display text-[10px] font-bold tracking-[0.04em] transition-[filter] duration-[var(--cc-dur-med)]"
+              :class="[
                 p.pid === ctx.myPid
                   ? 'bg-[var(--cc-soot)] text-[var(--cc-chalk)]'
-                  : 'bg-[var(--cc-live-dim)] text-[var(--cc-live)]'
-              "
+                  : 'bg-[var(--cc-live-dim)] text-[var(--cc-live)]',
+                p.muted ? 'grayscale' : '',
+              ]"
             >
               {{ p.pid === ctx.myPid ? "ME" : initialsFor(p) }}
-              <span
-                v-if="p.muted"
-                class="absolute -right-1 -bottom-1 flex h-3 w-3 items-center justify-center border border-[var(--cc-chalk)] bg-[var(--cc-signal)] text-[7px] font-bold text-white"
-                aria-label="Muted"
-              >
-                M
-              </span>
             </span>
             <span class="flex min-w-0 flex-1 flex-col">
               <span class="flex items-center gap-1.5">
-                <span class="truncate font-body text-[12px] font-semibold text-[var(--cc-ink)]">
+                <span
+                  class="truncate font-body text-[12px] font-semibold"
+                  :class="p.muted ? 'text-[var(--cc-ink-muted)]' : 'text-[var(--cc-ink)]'"
+                >
                   {{ p.name }}
                 </span>
                 <span
@@ -306,13 +303,26 @@ function initialsFor(p: StudioParticipant): string {
                 </span>
               </span>
               <span
-                class="truncate font-ui text-[8.5px] uppercase tracking-[0.1em] text-[var(--cc-ink-muted)]"
+                class="truncate font-ui text-[8.5px] uppercase tracking-[0.1em]"
+                :class="p.muted ? 'text-[var(--cc-signal)]' : 'text-[var(--cc-ink-muted)]'"
               >
-                {{ p.cameraOff ? "Camera off" : "On stage · live" }}
+                <template v-if="p.muted">
+                  Muted{{ p.cameraOff ? " · camera off" : "" }}
+                </template>
+                <template v-else>
+                  {{ p.cameraOff ? "Camera off" : "On stage · live" }}
+                </template>
               </span>
             </span>
             <span
-              v-if="slotOf(sourceIdFor(p)) != null"
+              v-if="p.muted"
+              class="shrink-0 border border-[var(--cc-signal)] bg-[var(--cc-signal-dim)] px-1.5 py-px font-ui text-[8px] uppercase tracking-[0.12em] text-[var(--cc-signal)]"
+              aria-label="Muted"
+            >
+              Muted
+            </span>
+            <span
+              v-else-if="slotOf(sourceIdFor(p)) != null"
               class="shrink-0 border px-1.5 py-px font-ui text-[8px] uppercase tracking-[0.12em]"
               :class="
                 p.pid === ctx.myPid
@@ -348,7 +358,7 @@ function initialsFor(p: StudioParticipant): string {
         <div v-if="ctx.screen.active.value" class="flex items-stretch">
           <button
             type="button"
-            class="flex min-w-0 flex-1 items-center gap-3 border border-[color:var(--cc-border)] bg-[var(--cc-chalk)] p-2 text-left transition-[transform,box-shadow,border-color] duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-snappy)] hover:-translate-y-px hover:border-[color:var(--cc-border-strong)] hover:shadow-[var(--cc-shadow-sm)]"
+            class="flex min-w-0 flex-1 items-center gap-3 border border-[color:var(--cc-border)] bg-[var(--cc-chalk)] p-2 text-left transition-[background-color,border-color,box-shadow] duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-smooth)] hover:bg-[var(--cc-chalk-warm)] hover:shadow-[inset_3px_0_0_0_var(--cc-ink)]"
             :class="
               slotOf(ctx.screenSourceId) != null
                 ? 'border-l-[3px] border-l-[var(--cc-info)]'
@@ -427,7 +437,7 @@ function initialsFor(p: StudioParticipant): string {
           <button
             type="button"
             :disabled="!isHost && p.pid !== ctx.myPid"
-            class="flex min-w-0 flex-1 items-center gap-3 border border-[color:var(--cc-border)] bg-[var(--cc-chalk)]/60 p-2 text-left transition-[transform,box-shadow,border-color] duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-snappy)] hover:-translate-y-px hover:border-[color:var(--cc-border-strong)] hover:shadow-[var(--cc-shadow-sm)] disabled:cursor-default disabled:hover:transform-none"
+            class="flex min-w-0 flex-1 items-center gap-3 border border-[color:var(--cc-border)] bg-[var(--cc-chalk)]/60 p-2 text-left transition-[background-color,border-color,box-shadow] duration-[var(--cc-dur-fast)] ease-[var(--cc-ease-smooth)] hover:bg-[var(--cc-chalk-warm)] hover:shadow-[inset_3px_0_0_0_var(--cc-ink)] disabled:cursor-default disabled:hover:transform-none"
             :class="p.raisedHand ? 'border-l-[3px] border-l-[var(--cc-caution)]' : ''"
             @click="isHost && p.pid !== ctx.myPid ? ctx.participants.bringOnStage(p.pid) : null"
           >
