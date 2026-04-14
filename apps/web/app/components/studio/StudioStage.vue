@@ -1,87 +1,19 @@
 <!--
-  StudioStage — the preview/broadcast frame.
+  StudioStage — hosts the <canvas> the Pixi compositor renders into.
 
-  This is where the Pixi canvas lives. The engine is mounted via
-  useStudioEngine(canvasRef). The wrapper <BroadcastFrame> is pure
-  presentation from the design system.
+  The engine itself is mounted one level up in studios/[id].vue and provided
+  via an injection key, so the toolbar / record / broadcast buttons can share
+  a single compositor instance. StudioStage just slots the canvas element
+  into the ref the page owns.
 -->
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { inject, type Ref } from "vue";
 import { BroadcastFrame } from "@commoncast/design-system";
-import { useStudioEngine } from "~/composables/useStudioEngine";
-import { useUserMedia } from "~/composables/useUserMedia";
-import { useStudioStore } from "~/stores/studio";
-import { asSceneId, asSourceId } from "@commoncast/studio-engine";
 
-const canvas = ref<HTMLCanvasElement | null>(null);
-const engine = useStudioEngine(canvas, { width: 1280, height: 720, fps: 30 });
-const media = useUserMedia();
-const studio = useStudioStore();
+const canvasSlot = inject<Ref<HTMLCanvasElement | null>>("commoncast:canvas");
 
-onMounted(async () => {
-  // Best-effort local camera. Fail silently if denied — the canvas still renders.
-  try {
-    await media.start({ audio: false, video: { width: 1280, height: 720 } });
-  } catch {
-    // no camera — the studio still works for layout/branding previews
-  }
-});
-
-// Once both engine and camera are ready, add the camera as a source and
-// assemble the scene according to the store.
-watch(
-  [engine.ready, media.videoTrack],
-  async ([ready, track]) => {
-    if (!ready || !engine.compositor.value) return;
-    if (track) {
-      await engine.addSource({
-        kind: "camera",
-        id: asSourceId("local"),
-        name: "You",
-        track,
-      });
-    }
-    renderScene();
-  },
-);
-
-// Update the engine whenever scene-relevant store fields change.
-watch(
-  () => [studio.activeLayout, studio.overlays, studio.brand, studio.activeSceneId],
-  () => renderScene(),
-  { deep: true },
-);
-
-function renderScene() {
-  if (!engine.ready.value) return;
-  const sourceIds = media.videoTrack.value ? [asSourceId("local")] : [];
-  engine.setScene({
-    id: asSceneId(studio.activeSceneId),
-    name: studio.activeScene?.name ?? "",
-    layout: studio.activeLayout,
-    feeds: sourceIds,
-    overlays: [
-      {
-        kind: "logo",
-        visible: studio.overlays.logo,
-        text: studio.brand.logoText,
-        accent: studio.brand.accent,
-      },
-      {
-        kind: "lowerThird",
-        visible: studio.overlays.lowerThird,
-        name: studio.brand.lowerName,
-        subtitle: studio.brand.lowerSubtitle,
-        accent: studio.brand.accent,
-      },
-      {
-        kind: "ticker",
-        visible: studio.overlays.ticker,
-        text: studio.brand.tickerText,
-        accent: studio.brand.accent,
-      },
-    ],
-  });
+function setCanvas(el: Element | null) {
+  if (canvasSlot) canvasSlot.value = el as HTMLCanvasElement | null;
 }
 </script>
 
@@ -97,7 +29,7 @@ function renderScene() {
 
     <div class="flex flex-1 items-center justify-center p-6">
       <BroadcastFrame class="max-w-full">
-        <canvas ref="canvas" class="h-full w-full" />
+        <canvas :ref="setCanvas" class="h-full w-full" />
       </BroadcastFrame>
     </div>
   </div>
