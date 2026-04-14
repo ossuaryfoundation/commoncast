@@ -25,6 +25,11 @@ const PERSIST: Record<string, Selector> = {
     scenes: s.scenes,
     activeSceneId: s.activeSceneId,
   }),
+  destinations: (s) => ({
+    all: s.all,
+    order: s.order,
+    seeded: s.seeded,
+  }),
 };
 
 function safeParse<T>(raw: string | null): T | null {

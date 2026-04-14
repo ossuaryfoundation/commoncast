@@ -13,7 +13,7 @@ import type { UseUserMediaReturn } from "./useUserMedia";
 import type { UseStudioPeersReturn } from "./useStudioPeers";
 import type { UseStageSelectionReturn } from "./useStageSelection";
 import type { UseStudioRecorderReturn } from "./useStudioRecorder";
-import type { UseBroadcastSenderReturn } from "./useBroadcastSender";
+import type { UseBroadcastFanoutReturn } from "./useBroadcastFanout";
 import type { UseStudioParticipantsReturn } from "./useStudioParticipants";
 import type { UseHostMixerReturn } from "./useHostMixer";
 
@@ -41,7 +41,7 @@ export interface StudioContext {
   readonly hostMixer: UseHostMixerReturn;
   readonly selection: UseStageSelectionReturn;
   readonly recorder: UseStudioRecorderReturn;
-  readonly sender: UseBroadcastSenderReturn;
+  readonly fanout: UseBroadcastFanoutReturn;
   readonly devices: StudioDevices;
   readonly screen: StudioScreen;
   readonly audioLevel: Ref<number>;

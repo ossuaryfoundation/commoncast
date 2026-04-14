@@ -1,37 +1,24 @@
 /**
- * useBroadcastSender
+ * useBroadcastSender — thin single-instance Vue wrapper around
+ * createBroadcastSender from ./broadcastSender. Kept for callers that
+ * only need to talk to one destination (the receive page's reverse
+ * flow, ad-hoc dev tests, etc).
  *
- * Publishes a MediaStreamTrack (typically the compositor's output track) to a
- * destination address via clasp. This is the "send composited video out
- * through clasp to an address" primitive from the build plan.
- *
- * Transport model: the composite track is carried over a NEW RTCPeerConnection.
- * Clasp only carries signaling (SDP offer/answer + ICE candidates) via the
- * broadcastOut* addresses. Media flows P2P over WebRTC — we do NOT try to
- * push raw frames through clasp (there's a 64KB frame cap).
+ * For multi-destination fanout use useBroadcastFanout instead — that's
+ * what the studio page wires to studio.isLive.
  */
-import { onScopeDispose, ref, shallowRef, type Ref } from "vue";
+import { onScopeDispose, readonly, ref, type Ref } from "vue";
 import { useNuxtApp } from "#app";
+import type { ClaspClient } from "@commoncast/clasp-client";
 import {
-  addresses,
-  type ClaspClient,
-} from "@commoncast/clasp-client";
+  createBroadcastSender,
+  type BroadcastSenderState,
+} from "./broadcastSender";
 
-export type BroadcastSenderState =
-  | "idle"
-  | "negotiating"
-  | "connected"
-  | "failed"
-  | "closed";
+export type { BroadcastSenderState };
 
 export interface UseBroadcastSenderReturn {
   readonly state: Readonly<Ref<BroadcastSenderState>>;
-  /**
-   * Open a one-way WebRTC connection carrying every track in `stream`
-   * (both video and audio, if present) and publish the offer at
-   * broadcastOut(studioId, destAddr). A receiver subscribed to that
-   * address writes the answer back and we complete the handshake.
-   */
   publish(opts: {
     studioId: string;
     destAddr: string;
@@ -40,95 +27,24 @@ export interface UseBroadcastSenderReturn {
   close(): void;
 }
 
-const RTC: RTCConfiguration = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-};
-
 export function useBroadcastSender(): UseBroadcastSenderReturn {
+  const nuxt = useNuxtApp();
+  const clasp = nuxt.$clasp as ClaspClient;
+  const inner = createBroadcastSender(clasp);
+
   const state = ref<BroadcastSenderState>("idle");
-  const pcRef = shallowRef<RTCPeerConnection | null>(null);
-  const unsubsRef = shallowRef<Array<() => void>>([]);
+  const unsub = inner.onStateChange((s) => {
+    state.value = s;
+  });
 
-  async function publish(opts: {
-    studioId: string;
-    destAddr: string;
-    stream: MediaStream;
-  }): Promise<void> {
-    const nuxt = useNuxtApp();
-    const clasp = nuxt.$clasp as ClaspClient;
+  onScopeDispose(() => {
+    unsub();
+    inner.close();
+  });
 
-    close();
-
-    const pc = new RTCPeerConnection(RTC);
-    pcRef.value = pc;
-    state.value = "negotiating";
-
-    // Attach every track from the output stream — typically one video
-    // (from the compositor's canvas capture) + one audio (from the
-    // AudioMixer's destination node). Associating them with the same
-    // MediaStream lets the receiver reconstitute a single stream and
-    // keep A/V in sync.
-    for (const track of opts.stream.getTracks()) {
-      pc.addTrack(track, opts.stream);
-    }
-
-    const offerAddr = addresses.broadcastOut(opts.studioId, opts.destAddr);
-    const answerAddr = addresses.broadcastOutAnswer(opts.studioId, opts.destAddr);
-    const iceHostAddr = addresses.broadcastOutIce(
-      opts.studioId,
-      opts.destAddr,
-      "host",
-    );
-    const iceReceiverAddr = addresses.broadcastOutIce(
-      opts.studioId,
-      opts.destAddr,
-      "receiver",
-    );
-
-    pc.addEventListener("icecandidate", (e) => {
-      if (e.candidate) {
-        void clasp.set(iceHostAddr, { candidate: e.candidate.toJSON() });
-      }
-    });
-
-    pc.addEventListener("connectionstatechange", () => {
-      if (pc.connectionState === "connected") state.value = "connected";
-      else if (pc.connectionState === "failed") state.value = "failed";
-      else if (pc.connectionState === "closed") state.value = "closed";
-    });
-
-    await clasp.connect();
-
-    // Subscribe to receiver's answer + ICE BEFORE publishing the offer so we
-    // don't race a fast receiver.
-    const unsubAnswer = clasp.on(answerAddr, (value) => {
-      const v = value as { sdp?: string } | null;
-      if (!v?.sdp) return;
-      void pc.setRemoteDescription({ type: "answer", sdp: v.sdp });
-    });
-    const unsubIce = clasp.on(iceReceiverAddr, (value) => {
-      const v = value as { candidate?: RTCIceCandidateInit } | null;
-      if (!v?.candidate) return;
-      void pc.addIceCandidate(v.candidate).catch(() => {});
-    });
-    unsubsRef.value = [unsubAnswer, unsubIce];
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    if (offer.sdp) {
-      await clasp.set(offerAddr, { sdp: offer.sdp });
-    }
-  }
-
-  function close(): void {
-    pcRef.value?.close();
-    pcRef.value = null;
-    unsubsRef.value.forEach((u) => u());
-    unsubsRef.value = [];
-    if (state.value !== "idle") state.value = "closed";
-  }
-
-  onScopeDispose(close);
-
-  return { state, publish, close };
+  return {
+    state: readonly(state) as Readonly<Ref<BroadcastSenderState>>,
+    publish: inner.publish.bind(inner),
+    close: inner.close.bind(inner),
+  };
 }

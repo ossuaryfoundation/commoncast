@@ -15,19 +15,24 @@
   as a real multi-destination drawer in a follow-up slice.
 -->
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button, OnAirBadge, Kbd } from "@commoncast/design-system";
 import { useStudioContext } from "~/composables/useStudioContext";
 import { useStudioStore } from "~/stores/studio";
+import { useDestinationsStore } from "~/stores/destinations";
 import { useTimecode } from "~/composables/useTimecode";
+import DestinationsDrawer from "~/components/studio/DestinationsDrawer.vue";
 
 const ctx = useStudioContext();
 const studio = useStudioStore();
+const destinationsStore = useDestinationsStore();
 const live = useTimecode();
 
-// Live-since counter — starts when we transition to a connected broadcast.
+const destinationsOpen = ref(false);
+
+// Live-since counter — starts when any destination transitions to connected.
 watch(
-  () => ctx.sender.state.value,
+  () => ctx.fanout.aggregate.value,
   (s) => {
     if (s === "connected") live.start();
     else live.stop();
@@ -46,11 +51,13 @@ function fmtRec(ms: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-const senderState = computed(() => ctx.sender.state.value);
+const senderState = computed(() => ctx.fanout.aggregate.value);
 const recorderState = computed(() => ctx.recorder.state.value);
 const recElapsed = computed(() => fmtRec(ctx.recorder.elapsedMs.value));
 const peerCount = computed(() => ctx.peers.remotePids.value.length);
 const engineReady = computed(() => ctx.engineReady.value);
+const destCount = computed(() => destinationsStore.count);
+const connectedCount = computed(() => ctx.fanout.connectedCount.value);
 
 const liveLabel = computed(() => {
   if (senderState.value === "negotiating") return "Going live…";
@@ -74,13 +81,25 @@ const recVariant = computed<"primary" | "ghost">(() =>
   recorderState.value === "recording" ? "primary" : "ghost",
 );
 
-// Pretty destination chip — single real destination for now ("test").
+// Destinations chip — aggregate of the whole fanout. Click opens the
+// destinations drawer where individual rows can be edited/toggled.
 const destChip = computed(() => {
   const s = senderState.value;
-  if (s === "connected") return { label: "test", state: "on" as const };
-  if (s === "negotiating") return { label: "test", state: "pending" as const };
-  if (s === "failed") return { label: "test", state: "fail" as const };
-  return { label: "test", state: "off" as const };
+  const label =
+    s === "connected"
+      ? `${connectedCount.value}/${destCount.value} live`
+      : destCount.value === 0
+        ? "none"
+        : `${destCount.value} configured`;
+  const state: "on" | "pending" | "fail" | "off" =
+    s === "connected"
+      ? "on"
+      : s === "negotiating"
+        ? "pending"
+        : s === "failed"
+          ? "fail"
+          : "off";
+  return { label, state };
 });
 </script>
 
@@ -125,11 +144,14 @@ const destChip = computed(() => {
       </Button>
     </div>
 
-    <!-- destinations chip -->
-    <div
-      class="ml-2 flex items-center gap-2 border border-[rgba(255,255,255,0.1)] px-2 py-[4px] font-ui text-[9px] uppercase tracking-[0.12em]"
+    <!-- destinations chip (opens the drawer) -->
+    <button
+      type="button"
+      class="ml-2 flex items-center gap-2 border border-[rgba(255,255,255,0.1)] px-2 py-[4px] font-ui text-[9px] uppercase tracking-[0.12em] transition-colors hover:border-[rgba(255,255,255,0.25)] hover:bg-[rgba(255,255,255,0.05)]"
+      aria-label="Open destinations drawer"
+      @click="destinationsOpen = true"
     >
-      <span class="text-[rgba(255,255,255,0.35)]">Destinations</span>
+      <span class="text-[rgba(255,255,255,0.45)]">Destinations</span>
       <span
         class="flex items-center gap-1 px-1.5 py-[1px]"
         :class="{
@@ -150,7 +172,9 @@ const destChip = computed(() => {
         />
         {{ destChip.label }}
       </span>
-    </div>
+    </button>
+
+    <DestinationsDrawer v-model:open="destinationsOpen" />
 
     <!-- peers chip -->
     <div

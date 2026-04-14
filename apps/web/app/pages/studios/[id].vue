@@ -25,10 +25,11 @@ import { asSceneId, asSourceId } from "@commoncast/studio-engine";
 import { useStudioStore } from "~/stores/studio";
 import { usePrefsStore } from "~/stores/prefs";
 import { useParticipantsStore } from "~/stores/participants";
+import { useDestinationsStore } from "~/stores/destinations";
 import { useStudioEngine } from "~/composables/useStudioEngine";
 import { useUserMedia } from "~/composables/useUserMedia";
 import { useStudioRecorder } from "~/composables/useStudioRecorder";
-import { useBroadcastSender } from "~/composables/useBroadcastSender";
+import { useBroadcastFanout } from "~/composables/useBroadcastFanout";
 import { useClaspRoom } from "~/composables/useClaspRoom";
 import { useStudioPeers } from "~/composables/useStudioPeers";
 import { useStudioParticipants } from "~/composables/useStudioParticipants";
@@ -53,6 +54,8 @@ definePageMeta({ layout: "studio" });
 const studio = useStudioStore();
 const prefs = usePrefsStore();
 const participantsStore = useParticipantsStore();
+const destinationsStore = useDestinationsStore();
+destinationsStore.seedDefaults();
 const route = useRoute();
 const router = useRouter();
 studio.studioId = String(route.params.id ?? "default");
@@ -106,9 +109,9 @@ async function switchMic(deviceId: string | null) {
   await startLocalMedia();
 }
 
-// ─── recorder + sender + selection + audio mixer ──────────────────
+// ─── recorder + fanout + selection + audio mixer ──────────────────
 const recorder = useStudioRecorder();
-const sender = useBroadcastSender();
+const fanout = useBroadcastFanout();
 const selection = useStageSelection();
 const hostMixer = useHostMixer();
 
@@ -430,7 +433,7 @@ function buildOutputStream(): MediaStream | null {
   return new MediaStream(tracks);
 }
 
-// ─── broadcast + record wiring ────────────────────────────────────
+// ─── broadcast (multi-destination fanout) + record ────────────────
 watch(
   () => studio.isLive,
   async (live) => {
@@ -443,17 +446,13 @@ watch(
         return;
       }
       try {
-        await sender.publish({
-          studioId: studio.studioId,
-          destAddr: "test",
-          stream,
-        });
+        await fanout.goAll(studio.studioId, stream);
       } catch (err) {
-        console.error("[commoncast] broadcast publish failed", err);
+        console.error("[commoncast] fanout goAll failed", err);
         studio.isLive = false;
       }
     } else {
-      sender.close();
+      fanout.stopAll();
     }
   },
 );
@@ -549,7 +548,7 @@ const ctx: StudioContext = {
   hostMixer,
   selection,
   recorder,
-  sender,
+  fanout,
   devices,
   screen: screenFacade,
   audioLevel,

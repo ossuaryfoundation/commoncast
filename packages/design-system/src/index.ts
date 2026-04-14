@@ -25,6 +25,8 @@ export { default as Tabs } from "./primitives/Tabs.vue";
 export { default as Toggle } from "./primitives/Toggle.vue";
 export { default as VUMeter } from "./primitives/VUMeter.vue";
 
+export { default as Drawer } from "./primitives/Drawer.vue";
+
 // ---- components ----
 export { default as BroadcastFrame } from "./components/BroadcastFrame.vue";
 export { default as ChatMessage } from "./components/ChatMessage.vue";

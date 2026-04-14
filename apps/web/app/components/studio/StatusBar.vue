@@ -44,9 +44,11 @@ const claspIndicator = computed<{ status: IndicatorStatus; value: string }>(() =
 });
 
 const senderIndicator = computed<{ status: IndicatorStatus; value: string }>(() => {
-  const s = ctx.sender.state.value;
-  if (s === "connected") return { status: "live", value: "1 dest" };
-  if (s === "negotiating") return { status: "caution", value: "negotiating" };
+  const s = ctx.fanout.aggregate.value;
+  const connected = ctx.fanout.connectedCount.value;
+  const active = ctx.fanout.activeCount.value;
+  if (s === "connected") return { status: "live", value: `${connected}/${active || connected} dest` };
+  if (s === "negotiating") return { status: "caution", value: `negotiating ${active}` };
   if (s === "failed") return { status: "offline", value: "failed" };
   return { status: "offline", value: "ready" };
 });
