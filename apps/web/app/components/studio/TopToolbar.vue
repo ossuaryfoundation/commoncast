@@ -11,7 +11,7 @@
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Button, OnAirBadge, StatusDot } from "@commoncast/design-system";
+import { Button, OnAirBadge, StatusDot, Tooltip } from "@commoncast/design-system";
 import { useStudioContext } from "~/composables/useStudioContext";
 import { useStudioStore } from "~/stores/studio";
 import { useDestinationsStore } from "~/stores/destinations";
@@ -143,72 +143,74 @@ async function copyInvite() {
     </span>
 
     <!-- Copy invite -->
-    <button
-      type="button"
-      class="flex items-center gap-1.5 border border-[var(--cc-soot-mid)] bg-transparent px-2 py-[4px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-whisper)] transition-colors hover:border-[var(--cc-ink-ghost)] hover:bg-[var(--cc-soot-mid)] hover:text-[var(--cc-chalk)]"
-      aria-label="Copy invite link"
-      title="Copy invite link"
-      @click="copyInvite"
-    >
-      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
-        <rect x="1" y="3" width="8" height="8" stroke="currentColor" stroke-width="1.2" />
-        <path d="M3 3 V1 H11 V9 H9" stroke="currentColor" stroke-width="1.2" fill="none" />
-      </svg>
-      <span>Copy invite</span>
-    </button>
+    <Tooltip content="Copy invite link to clipboard">
+      <button
+        type="button"
+        class="flex items-center gap-1.5 border border-[var(--cc-soot-mid)] bg-transparent px-2 py-[4px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-whisper)] transition-colors hover:border-[var(--cc-ink-ghost)] hover:bg-[var(--cc-soot-mid)] hover:text-[var(--cc-chalk)]"
+        aria-label="Copy invite link"
+        @click="copyInvite"
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+          <rect x="1" y="3" width="8" height="8" stroke="currentColor" stroke-width="1.2" />
+          <path d="M3 3 V1 H11 V9 H9" stroke="currentColor" stroke-width="1.2" fill="none" />
+        </svg>
+        <span>Invite</span>
+      </button>
+    </Tooltip>
 
     <span class="mx-1 h-4 w-px bg-[var(--cc-soot-mid)]" />
 
     <!-- Go live + record -->
     <div class="flex items-center gap-2">
-      <Button
-        :variant="liveVariant"
-        size="sm"
-        :disabled="!engineReady && senderState !== 'connected'"
-        :title="!engineReady ? 'Engine is still initializing…' : undefined"
-        @click="studio.goLive()"
-      >
-        {{ liveLabel }}
-      </Button>
-      <Button
-        :variant="recVariant"
-        size="sm"
-        :disabled="!engineReady && recorderState !== 'recording'"
-        :title="!engineReady ? 'Engine is still initializing…' : undefined"
-        @click="studio.toggleRecording()"
-      >
-        <span class="flex items-center gap-1.5">
-          <span
-            v-if="recorderState === 'recording'"
-            class="h-[7px] w-[7px] rounded-full bg-white"
-            style="animation: cc-blink 1.2s step-end infinite"
-          />
-          {{ recLabel }}
-        </span>
-      </Button>
+      <Tooltip :content="engineReady ? 'Go Live · G' : 'Engine initializing…'">
+        <Button
+          :variant="liveVariant"
+          size="sm"
+          :disabled="!engineReady && senderState !== 'connected'"
+          @click="studio.goLive()"
+        >
+          {{ liveLabel }}
+        </Button>
+      </Tooltip>
+      <Tooltip :content="engineReady ? 'Toggle recording · R' : 'Engine initializing…'">
+        <Button
+          :variant="recVariant"
+          size="sm"
+          :disabled="!engineReady && recorderState !== 'recording'"
+          @click="studio.toggleRecording()"
+        >
+          <span class="flex items-center gap-1.5">
+            <span
+              v-if="recorderState === 'recording'"
+              class="h-[7px] w-[7px] rounded-full bg-white"
+              style="animation: cc-blink 1.2s step-end infinite"
+            />
+            {{ recLabel }}
+          </span>
+        </Button>
+      </Tooltip>
     </div>
 
-    <!-- destinations chip — one button, full contrast -->
-    <button
-      type="button"
-      class="ml-1 flex items-center gap-2 border border-[var(--cc-soot-mid)] bg-transparent px-2.5 py-[5px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-chalk)] transition-colors hover:border-[var(--cc-ink-ghost)] hover:bg-[var(--cc-soot-mid)]"
-      :aria-expanded="destinationsOpen"
-      aria-haspopup="dialog"
-      :title="destCount === 0 ? 'Add a destination to go live' : 'Manage destinations'"
-      @click="destinationsOpen = true"
+    <!-- destinations chip -->
+    <Tooltip
+      :content="destCount === 0 ? 'Add a destination to go live' : 'Manage destinations'"
     >
-      <StatusDot
-        :status="destTone"
-        :pulse="destTone === 'live'"
-        :size="5"
-      />
-      <span>Destinations</span>
-      <span
-        class="border-l border-[var(--cc-soot-mid)] pl-2 tabular-nums text-[var(--cc-ink-whisper)]"
+      <button
+        type="button"
+        class="ml-1 flex items-center gap-2 border border-[var(--cc-soot-mid)] bg-transparent px-2.5 py-[5px] font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-chalk)] transition-colors hover:border-[var(--cc-ink-ghost)] hover:bg-[var(--cc-soot-mid)]"
+        :aria-expanded="destinationsOpen"
+        aria-haspopup="dialog"
+        @click="destinationsOpen = true"
       >
-        {{ destCountLabel }}
-      </span>
-    </button>
+        <StatusDot :status="destTone" :pulse="destTone === 'live'" :size="5" />
+        <span>Destinations</span>
+        <span
+          class="border-l border-[var(--cc-soot-mid)] pl-2 tabular-nums text-[var(--cc-ink-whisper)]"
+        >
+          {{ destCountLabel }}
+        </span>
+      </button>
+    </Tooltip>
 
     <DestinationsDrawer v-model:open="destinationsOpen" />
 

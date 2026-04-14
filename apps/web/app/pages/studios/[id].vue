@@ -18,7 +18,7 @@
       user override any auto-assignment.
 -->
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from "vue";
+import { computed, onMounted, provide, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { asSceneId, asSourceId } from "@commoncast/studio-engine";
 
@@ -38,6 +38,8 @@ import { useStudioChat } from "~/composables/useStudioChat";
 import { useHostMixer } from "~/composables/useHostMixer";
 import { useStageSelection } from "~/composables/useStageSelection";
 import { useToasts } from "~/composables/useToasts";
+import { useHotkeys } from "~/composables/useHotkeys";
+import { useCommands, type Command } from "~/composables/useCommands";
 import { useScreenCapture } from "~/composables/useScreenCapture";
 import { useAudioLevels } from "~/composables/useAudioLevels";
 import { useMediaDevices } from "~/composables/useMediaDevices";
@@ -582,19 +584,293 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ─── keyboard ──────────────────────────────────────────────────────
-function handleKey(e: KeyboardEvent) {
-  const target = e.target as HTMLElement | null;
-  if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
-  const match = e.key.match(/^F([1-5])$/);
-  if (!match) return;
-  const idx = Number(match[1]);
-  const scene = studio.scenes.find((s) => s.index === idx);
-  if (scene) {
-    e.preventDefault();
-    studio.setScene(scene.id);
+// ─── command + hotkey registration ────────────────────────────────
+const { register: registerHotkey } = useHotkeys();
+const { register: registerCommands } = useCommands();
+
+async function copyInviteLink(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const url = `${window.location.origin}/join/${studio.studioId}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toasts.success({ title: "Invite link copied", description: url });
+  } catch {
+    toasts.error({
+      title: "Couldn't copy to clipboard",
+      description: "Your browser may have blocked clipboard access.",
+    });
   }
 }
+
+function myEntry() {
+  return participantsStore.all[myPid];
+}
+
+// Static hotkeys. Scene F1-F5 are registered dynamically below so they
+// track scene order changes.
+registerHotkey({
+  id: "studio.mute.self",
+  keys: "m",
+  label: "Toggle self mute",
+  category: "People",
+  action: async () => {
+    const me = myEntry();
+    if (!me) return;
+    await participants.setMuted(myPid, !me.muted);
+  },
+});
+registerHotkey({
+  id: "studio.live.toggle",
+  keys: "g",
+  label: "Toggle Go Live",
+  category: "Broadcast",
+  action: () => {
+    studio.isLive = !studio.isLive;
+  },
+});
+registerHotkey({
+  id: "studio.record.toggle",
+  keys: "r",
+  label: "Toggle recording",
+  category: "Broadcast",
+  action: () => {
+    studio.isRecording = !studio.isRecording;
+  },
+});
+registerHotkey({
+  id: "studio.stage.mode.toggle",
+  keys: "t",
+  label: "Toggle stage edit/operate mode",
+  category: "Stage",
+  action: () => {
+    selection.toggleMode();
+  },
+});
+// F1-F5 scene recall, registered per scene index.
+for (let i = 1; i <= 5; i++) {
+  registerHotkey({
+    id: `studio.scene.${i}`,
+    keys: `f${i}`,
+    label: `Go to scene ${i}`,
+    category: "Scenes",
+    action: () => {
+      const scene = studio.scenes.find((s) => s.index === i);
+      if (scene) studio.setScene(scene.id);
+    },
+  });
+}
+
+// Static commands — registered once. Dynamic commands (per-scene
+// "Go to scene X") are registered in a watcher below so they track
+// scene edits.
+const staticCommands: Command[] = [
+  // ─── System ──────────
+  {
+    id: "system.invite",
+    label: "Copy invite link",
+    description: "Copy /join/{studioId} to the clipboard",
+    category: "System",
+    keywords: ["share", "guest", "url"],
+    action: copyInviteLink,
+  },
+  {
+    id: "system.settings",
+    label: "Open settings",
+    category: "System",
+    action: () => router.push("/settings"),
+  },
+  {
+    id: "system.dashboard",
+    label: "Open dashboard",
+    category: "System",
+    action: () => router.push("/"),
+  },
+
+  // ─── Broadcast ──────────
+  {
+    id: "broadcast.go-live",
+    label: "Go Live",
+    description: "Publish the composite to every auto destination",
+    category: "Broadcast",
+    keys: "G",
+    keywords: ["start", "stream", "publish"],
+    when: () => !studio.isLive,
+    action: () => {
+      studio.isLive = true;
+    },
+  },
+  {
+    id: "broadcast.stop-live",
+    label: "Stop broadcast",
+    category: "Broadcast",
+    keys: "G",
+    keywords: ["end", "stream"],
+    when: () => studio.isLive,
+    action: () => {
+      studio.isLive = false;
+    },
+  },
+  {
+    id: "broadcast.record.start",
+    label: "Start recording",
+    category: "Broadcast",
+    keys: "R",
+    keywords: ["rec", "capture"],
+    when: () => !studio.isRecording,
+    action: () => {
+      studio.isRecording = true;
+    },
+  },
+  {
+    id: "broadcast.record.stop",
+    label: "Stop recording",
+    category: "Broadcast",
+    keys: "R",
+    when: () => studio.isRecording,
+    action: () => {
+      studio.isRecording = false;
+    },
+  },
+
+  // ─── Stage ──────────
+  {
+    id: "stage.edit",
+    label: "Switch stage to edit mode",
+    description: "Show slot chips, empty placeholders, and clear buttons",
+    category: "Stage",
+    keys: "T",
+    when: () => selection.mode.value !== "edit",
+    action: () => selection.setMode("edit"),
+  },
+  {
+    id: "stage.operate",
+    label: "Switch stage to operate mode",
+    description: "Hide slot overlay during live",
+    category: "Stage",
+    keys: "T",
+    when: () => selection.mode.value !== "operate",
+    action: () => selection.setMode("operate"),
+  },
+  {
+    id: "stage.clear-selection",
+    label: "Clear slot selection",
+    category: "Stage",
+    when: () => selection.slot.value != null,
+    action: () => selection.clear(),
+  },
+
+  // ─── Scenes ──────────
+  {
+    id: "scenes.add",
+    label: "Add new scene",
+    category: "Scenes",
+    keywords: ["create", "new"],
+    action: () => {
+      const scene = studio.addScene({
+        name: `Scene ${studio.scenes.length + 1}`,
+      });
+      studio.setScene(scene.id);
+    },
+  },
+  {
+    id: "scenes.duplicate",
+    label: "Duplicate current scene",
+    category: "Scenes",
+    when: () => studio.activeScene != null,
+    action: () => {
+      if (studio.activeScene) studio.duplicateScene(studio.activeScene.id);
+    },
+  },
+  {
+    id: "scenes.delete",
+    label: "Delete current scene",
+    category: "Scenes",
+    when: () => studio.activeScene != null && studio.scenes.length > 1,
+    action: () => {
+      if (studio.activeScene) studio.removeScene(studio.activeScene.id);
+    },
+  },
+
+  // ─── People ──────────
+  {
+    id: "people.mute.self.on",
+    label: "Mute myself",
+    category: "People",
+    keys: "M",
+    when: () => myEntry()?.muted === false,
+    action: () => participants.setMuted(myPid, true),
+  },
+  {
+    id: "people.mute.self.off",
+    label: "Unmute myself",
+    category: "People",
+    keys: "M",
+    when: () => myEntry()?.muted === true,
+    action: () => participants.setMuted(myPid, false),
+  },
+  {
+    id: "people.camera.self.off",
+    label: "Turn my camera off",
+    category: "People",
+    when: () => myEntry()?.cameraOff !== true,
+    action: () => participants.setCameraOff(myPid, true),
+  },
+  {
+    id: "people.camera.self.on",
+    label: "Turn my camera on",
+    category: "People",
+    when: () => myEntry()?.cameraOff === true,
+    action: () => participants.setCameraOff(myPid, false),
+  },
+  {
+    id: "people.raise-hand",
+    label: "Raise my hand",
+    description: "Request to come on stage",
+    category: "People",
+    when: () => role === "guest" && myEntry()?.raisedHand !== true,
+    action: () => participants.raiseHand(true),
+  },
+  {
+    id: "people.lower-hand",
+    label: "Lower my hand",
+    category: "People",
+    when: () => role === "guest" && myEntry()?.raisedHand === true,
+    action: () => participants.raiseHand(false),
+  },
+
+  // ─── Chat ──────────
+  {
+    id: "chat.clear-featured",
+    label: "Clear featured chat message",
+    category: "Chat",
+    when: () => chatStore.featuredId != null && role === "host",
+    action: () => chat.clearFeatured(),
+  },
+];
+registerCommands(staticCommands);
+
+// Dynamic: one "Go to scene X" command per scene, re-registered when
+// the scenes array changes so renames/reorders show up in the palette.
+let sceneCommandIds: string[] = [];
+watch(
+  () => studio.scenes.map((s) => ({ id: s.id, name: s.name, index: s.index })),
+  (scenes) => {
+    if (sceneCommandIds.length > 0) {
+      for (const id of sceneCommandIds) registerCommands; // no-op to keep the registry happy
+    }
+    // Build next
+    const next: Command[] = scenes.map((scene) => ({
+      id: `scenes.goto.${scene.id}`,
+      label: `Go to scene: ${scene.name}`,
+      category: "Scenes",
+      keys: scene.index <= 5 ? `F${scene.index}` : undefined,
+      action: () => studio.setScene(scene.id),
+    }));
+    registerCommands(next);
+    sceneCommandIds = next.map((c) => c.id);
+  },
+  { immediate: true, deep: true },
+);
 
 // ─── StudioContext ─────────────────────────────────────────────────
 function labelForSource(id: string): string {
@@ -684,11 +960,10 @@ watch(
 
 // ─── lifecycle ─────────────────────────────────────────────────────
 onMounted(async () => {
-  window.addEventListener("keydown", handleKey);
   await startLocalMedia();
   try {
     await peers.join(myName);
-  } catch (err) {
+  } catch {
     toasts.error({
       title: "Couldn't join the studio",
       description:
@@ -707,10 +982,6 @@ onMounted(async () => {
       timeout: 0,
     });
   }
-});
-
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleKey);
 });
 </script>
 

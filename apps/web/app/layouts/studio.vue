@@ -4,11 +4,15 @@
 -->
 <script setup lang="ts">
 import ToastStack from "~/components/ToastStack.vue";
+import CommandPaletteMount from "~/components/CommandPaletteMount.vue";
+import ShortcutsDialog from "~/components/ShortcutsDialog.vue";
 </script>
 
 <template>
   <div class="h-full">
     <slot />
     <ToastStack />
+    <CommandPaletteMount />
+    <ShortcutsDialog />
   </div>
 </template>
