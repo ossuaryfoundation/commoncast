@@ -26,6 +26,7 @@ import { useStudioStore } from "~/stores/studio";
 import { usePrefsStore } from "~/stores/prefs";
 import { useParticipantsStore } from "~/stores/participants";
 import { useDestinationsStore } from "~/stores/destinations";
+import { useChatStore } from "~/stores/chat";
 import { useStudioEngine } from "~/composables/useStudioEngine";
 import { useUserMedia } from "~/composables/useUserMedia";
 import { useStudioRecorder } from "~/composables/useStudioRecorder";
@@ -33,6 +34,7 @@ import { useBroadcastFanout } from "~/composables/useBroadcastFanout";
 import { useClaspRoom } from "~/composables/useClaspRoom";
 import { useStudioPeers } from "~/composables/useStudioPeers";
 import { useStudioParticipants } from "~/composables/useStudioParticipants";
+import { useStudioChat } from "~/composables/useStudioChat";
 import { useHostMixer } from "~/composables/useHostMixer";
 import { useStageSelection } from "~/composables/useStageSelection";
 import { useScreenCapture } from "~/composables/useScreenCapture";
@@ -167,6 +169,15 @@ const participants = useStudioParticipants({
     void router.push("/");
   },
 });
+
+// ─── chat projection + send / feature / clear ─────────────────
+const chat = useStudioChat({
+  studioId: studio.studioId,
+  myPid,
+  myName,
+  role,
+});
+const chatStore = useChatStore();
 
 // ─── source mounting ───────────────────────────────────────────────
 
@@ -373,32 +384,47 @@ function renderScene() {
   if (!engine.ready.value) return;
   const scene = studio.activeScene;
   if (!scene) return;
+  const overlays: Parameters<typeof engine.setScene>[0]["overlays"] = [
+    {
+      kind: "logo",
+      visible: scene.overlays.logo,
+      text: studio.brand.logoText,
+      accent: studio.brand.accent,
+    },
+    {
+      kind: "lowerThird",
+      visible: scene.overlays.lowerThird,
+      name: studio.brand.lowerName,
+      subtitle: studio.brand.lowerSubtitle,
+      accent: studio.brand.accent,
+    },
+    {
+      kind: "ticker",
+      visible: scene.overlays.ticker,
+      text: studio.brand.tickerText,
+      accent: studio.brand.accent,
+    },
+  ];
+  // Ambient overlay: a featured chat message rendered as a transient
+  // banner over every scene. Driven by chat store → composable auto-clear
+  // → compositor redraw.
+  const featured = chatStore.featured;
+  if (featured) {
+    overlays.push({
+      kind: "chatBanner",
+      visible: true,
+      name: featured.fromName,
+      text: featured.text,
+      platform: featured.platform,
+      accent: studio.brand.accent,
+    });
+  }
   engine.setScene({
     id: asSceneId(scene.id),
     name: scene.name,
     layout: scene.layout,
     feeds: scene.feeds.map((id) => (id ? asSourceId(id) : null)),
-    overlays: [
-      {
-        kind: "logo",
-        visible: scene.overlays.logo,
-        text: studio.brand.logoText,
-        accent: studio.brand.accent,
-      },
-      {
-        kind: "lowerThird",
-        visible: scene.overlays.lowerThird,
-        name: studio.brand.lowerName,
-        subtitle: studio.brand.lowerSubtitle,
-        accent: studio.brand.accent,
-      },
-      {
-        kind: "ticker",
-        visible: scene.overlays.ticker,
-        text: studio.brand.tickerText,
-        accent: studio.brand.accent,
-      },
-    ],
+    overlays,
   });
 }
 
@@ -410,6 +436,8 @@ watch(
     studio.activeScene?.feeds,
     studio.activeScene?.overlays,
     studio.brand,
+    chatStore.featuredId,
+    chatStore.featured?.text,
   ],
   () => renderScene(),
   { deep: true },
@@ -545,6 +573,7 @@ const ctx: StudioContext = {
   media,
   peers,
   participants,
+  chat,
   hostMixer,
   selection,
   recorder,

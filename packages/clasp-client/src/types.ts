@@ -44,3 +44,22 @@ export type SignalPayload =
   | { type: "offer"; sdp: string }
   | { type: "answer"; sdp: string }
   | { type: "ice"; candidate: RTCIceCandidateInit };
+
+/**
+ * A single chat message in a studio. Stored at
+ * addresses.chatMessage(studioId, msg.id); receivers subscribe to
+ * chatMessagesWildcard and project them into whatever chat UI they want.
+ */
+export interface ChatMessage {
+  id: string;
+  fromPid: string;
+  fromName: string;
+  text: string;
+  /**
+   * Where the message originated. MVP only emits "commoncast" (clasp
+   * native); "youtube" / "twitch" come in a later slice that ingests
+   * external platform chats.
+   */
+  platform: "commoncast" | "youtube" | "twitch";
+  sentAt: number;
+}

@@ -29,6 +29,7 @@ import {
 } from "@commoncast/design-system";
 import { useStudioStore } from "~/stores/studio";
 import AudioMixerStrip from "~/components/studio/AudioMixerStrip.vue";
+import ChatPanel from "~/components/studio/ChatPanel.vue";
 
 const studio = useStudioStore();
 
@@ -95,6 +96,7 @@ const tabs = [
   { id: "overlays", label: "Overlays" },
   { id: "scenes", label: "Scenes" },
   { id: "brand", label: "Brand" },
+  { id: "chat", label: "Chat" },
 ] as const;
 type TabId = (typeof tabs)[number]["id"];
 const activeTab = ref<TabId>("layout");
@@ -263,6 +265,11 @@ const overlayState = computed(() => ({
         <Input v-model="studio.brand.lowerSubtitle" label="Lower third subtitle" />
         <Input v-model="studio.brand.logoText" label="Logo text" />
         <Input v-model="studio.brand.tickerText" label="Ticker text" />
+      </div>
+
+      <!-- Chat -->
+      <div v-else-if="activeTab === 'chat'" class="flex h-full min-h-[320px] flex-col">
+        <ChatPanel />
       </div>
 
     </div>

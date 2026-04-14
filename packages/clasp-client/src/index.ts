@@ -22,4 +22,5 @@ export type {
   ClaspClientOptions,
   ConnectionState,
   SignalPayload,
+  ChatMessage,
 } from "./types.js";

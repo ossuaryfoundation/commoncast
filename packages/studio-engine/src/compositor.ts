@@ -32,6 +32,7 @@ import { computeSlots, getSlotCount } from "./layouts/index.js";
 import { createCameraSource, type CameraSourceHandle } from "./sources/CameraSource.js";
 import {
   DEFAULT_SETTINGS,
+  type ChatBannerOverlaySpec,
   type CompositorSettings,
   type LogoOverlaySpec,
   type LowerThirdOverlaySpec,
@@ -334,6 +335,8 @@ function createOverlayNode(
       return createLogoNode(overlay, settings);
     case "lowerThird":
       return createLowerThirdNode(overlay, settings);
+    case "chatBanner":
+      return createChatBannerNode(overlay, settings);
     case "ticker":
       return createTickerNode(overlay, settings);
   }
@@ -420,5 +423,70 @@ function createTickerNode(
   text.y = 9;
   c.addChild(bg, text);
   c.y = settings.height - 36;
+  return c;
+}
+
+function createChatBannerNode(
+  spec: ChatBannerOverlaySpec,
+  settings: CompositorSettings,
+): Container {
+  const WIDTH = 600;
+  const HEIGHT = 72;
+  const PADDING_X = 20;
+  const BODY_WIDTH = WIDTH - PADDING_X * 2 - 4; // account for accent bar
+
+  const c = new Container();
+  const accentBar = new Graphics()
+    .rect(0, 0, 4, HEIGHT)
+    .fill({ color: spec.accent });
+  const panel = new Graphics()
+    .rect(4, 0, WIDTH - 4, HEIGHT)
+    .fill({ color: 0x1c1b1a, alpha: 0.85 });
+
+  const nameText = new Text({
+    text: spec.name,
+    style: {
+      fontFamily: "Outfit, sans-serif",
+      fontSize: 16,
+      fontWeight: "700",
+      fill: "#f4f2ef",
+    },
+  });
+  nameText.x = PADDING_X + 4;
+  nameText.y = 10;
+
+  const platformLabel = spec.platform === "youtube"
+    ? "YT"
+    : spec.platform === "twitch"
+      ? "TW"
+      : "CC";
+  const platformPill = new Text({
+    text: platformLabel,
+    style: {
+      fontFamily: "DM Mono, monospace",
+      fontSize: 9,
+      fill: "#f4f2ef",
+      letterSpacing: 1.4,
+    },
+  });
+  platformPill.x = PADDING_X + 4 + nameText.width + 10;
+  platformPill.y = 14;
+
+  const body = new Text({
+    text: spec.text,
+    style: {
+      fontFamily: "Source Sans 3, sans-serif",
+      fontSize: 13,
+      fill: "#c8c5c1",
+      wordWrap: true,
+      wordWrapWidth: BODY_WIDTH,
+    },
+  });
+  body.x = PADDING_X + 4;
+  body.y = 32;
+
+  c.addChild(accentBar, panel, nameText, platformPill, body);
+  c.x = Math.round((settings.width - WIDTH) / 2);
+  c.y = 48;
   return c;
 }

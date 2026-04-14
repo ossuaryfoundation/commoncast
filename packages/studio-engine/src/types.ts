@@ -83,10 +83,28 @@ export interface TickerOverlaySpec {
   accent: string;
 }
 
+/**
+ * Transient "feature on stream" chat banner. Rendered at the top of the
+ * frame with the commenter's name + their message body, tinted by the
+ * studio accent. The caller is responsible for driving visibility
+ * (the compositor has no internal timer) — typically the chat composable
+ * on the host schedules an auto-hide a few seconds after featuring.
+ */
+export interface ChatBannerOverlaySpec {
+  kind: "chatBanner";
+  visible: boolean;
+  name: string;
+  text: string;
+  /** Origin platform tag — rendered as a small pill when present. */
+  platform?: "commoncast" | "youtube" | "twitch";
+  accent: string;
+}
+
 export type OverlaySpec =
   | LogoOverlaySpec
   | LowerThirdOverlaySpec
-  | TickerOverlaySpec;
+  | TickerOverlaySpec
+  | ChatBannerOverlaySpec;
 
 // ---- scene ------------------------------------------------------------
 

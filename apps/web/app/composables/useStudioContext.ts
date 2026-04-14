@@ -16,6 +16,7 @@ import type { UseStudioRecorderReturn } from "./useStudioRecorder";
 import type { UseBroadcastFanoutReturn } from "./useBroadcastFanout";
 import type { UseStudioParticipantsReturn } from "./useStudioParticipants";
 import type { UseHostMixerReturn } from "./useHostMixer";
+import type { UseStudioChatReturn } from "./useStudioChat";
 
 export interface StudioDevices {
   readonly videoInputs: Ref<MediaDeviceInfo[]>;
@@ -38,6 +39,7 @@ export interface StudioContext {
   readonly media: UseUserMediaReturn;
   readonly peers: UseStudioPeersReturn;
   readonly participants: UseStudioParticipantsReturn;
+  readonly chat: UseStudioChatReturn;
   readonly hostMixer: UseHostMixerReturn;
   readonly selection: UseStageSelectionReturn;
   readonly recorder: UseStudioRecorderReturn;
