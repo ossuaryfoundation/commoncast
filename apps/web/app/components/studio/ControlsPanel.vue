@@ -14,21 +14,80 @@
   - Chat      → deliberate empty state until the real chat slice lands.
 -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import {
   ColorSwatch,
   Input,
   LayoutOption,
+  Menu,
   OverlayRow,
   PanelHeader,
   SceneButton,
   Tabs,
   type LayoutId,
+  type MenuItem,
 } from "@commoncast/design-system";
 import { useStudioStore } from "~/stores/studio";
 import AudioMixerStrip from "~/components/studio/AudioMixerStrip.vue";
 
 const studio = useStudioStore();
+
+// ─── scene editor state ─────────────────────────────────────────
+const editingSceneId = ref<string | null>(null);
+const editingName = ref("");
+const nameInputRef = ref<HTMLInputElement | null>(null);
+
+async function startRename(sceneId: string, currentName: string) {
+  editingSceneId.value = sceneId;
+  editingName.value = currentName;
+  await nextTick();
+  nameInputRef.value?.focus();
+  nameInputRef.value?.select();
+}
+function commitRename() {
+  if (!editingSceneId.value) return;
+  studio.renameScene(editingSceneId.value, editingName.value);
+  editingSceneId.value = null;
+}
+function cancelRename() {
+  editingSceneId.value = null;
+}
+
+function addSceneClicked() {
+  const scene = studio.addScene({ name: `Scene ${studio.scenes.length + 1}` });
+  studio.setScene(scene.id);
+  void startRename(scene.id, scene.name);
+}
+
+function sceneMenuItems(sceneId: string): MenuItem[] {
+  return [
+    { id: "rename", label: "Rename" },
+    { id: "duplicate", label: "Duplicate" },
+    { kind: "separator" },
+    {
+      id: "delete",
+      label: "Delete",
+      destructive: true,
+      disabled: studio.scenes.length <= 1,
+    },
+  ];
+}
+
+function handleSceneMenu(sceneId: string, action: string) {
+  const scene = studio.scenes.find((s) => s.id === sceneId);
+  if (!scene) return;
+  switch (action) {
+    case "rename":
+      void startRename(sceneId, scene.name);
+      break;
+    case "duplicate":
+      studio.duplicateScene(sceneId);
+      break;
+    case "delete":
+      studio.removeScene(sceneId);
+      break;
+  }
+}
 
 const tabs = [
   { id: "layout", label: "Layout" },
@@ -115,16 +174,73 @@ const overlayState = computed(() => ({
       </div>
 
       <!-- Scenes -->
-      <div v-else-if="activeTab === 'scenes'" class="flex flex-col gap-1">
-        <SceneButton
+      <div v-else-if="activeTab === 'scenes'" class="flex flex-col gap-2">
+        <div
           v-for="scene in studio.scenes"
           :key="scene.id"
-          :index="scene.index"
-          :name="scene.name"
-          :shortcut="scene.shortcut"
-          :active="studio.activeSceneId === scene.id"
-          @select="studio.setScene(scene.id)"
-        />
+          class="flex items-stretch"
+        >
+          <!-- Inline rename editor when this row is being edited. -->
+          <label
+            v-if="editingSceneId === scene.id"
+            class="group flex min-w-0 flex-1 items-center gap-3 border-l-[3px] border-l-[var(--cc-signal)] bg-[var(--cc-chalk)] px-3 py-3"
+          >
+            <span
+              class="inline-flex h-6 w-6 items-center justify-center rounded-[var(--cc-radius-sm)] bg-[var(--cc-soot)] font-ui text-[9px] text-[var(--cc-chalk)]"
+            >{{ scene.index }}</span>
+            <input
+              ref="nameInputRef"
+              v-model="editingName"
+              type="text"
+              class="min-w-0 flex-1 border-0 bg-transparent font-display text-[13px] font-semibold text-[var(--cc-ink)] outline-none"
+              @keydown.enter.prevent="commitRename"
+              @keydown.escape.prevent="cancelRename"
+              @blur="commitRename"
+            />
+          </label>
+          <SceneButton
+            v-else
+            :index="scene.index"
+            :name="scene.name"
+            :shortcut="scene.shortcut"
+            :active="studio.activeSceneId === scene.id"
+            class="min-w-0 flex-1"
+            @select="studio.setScene(scene.id)"
+            @dblclick="startRename(scene.id, scene.name)"
+          />
+          <Menu
+            :items="sceneMenuItems(scene.id)"
+            @select="(id) => handleSceneMenu(scene.id, id)"
+          >
+            <template #trigger>
+              <button
+                type="button"
+                class="flex h-full shrink-0 items-center justify-center border-y border-r border-[color:var(--cc-border)] bg-[var(--cc-chalk)] px-2 font-ui text-[var(--cc-ink-muted)] transition-colors hover:bg-[var(--cc-chalk-warm)] hover:text-[var(--cc-ink)]"
+                aria-label="Scene actions"
+              >
+                <svg width="12" height="4" viewBox="0 0 12 4" aria-hidden>
+                  <circle cx="2" cy="2" r="1" fill="currentColor" />
+                  <circle cx="6" cy="2" r="1" fill="currentColor" />
+                  <circle cx="10" cy="2" r="1" fill="currentColor" />
+                </svg>
+              </button>
+            </template>
+          </Menu>
+        </div>
+
+        <button
+          type="button"
+          class="flex w-full items-center justify-center gap-2 border border-dashed border-[color:var(--cc-border-strong)] bg-transparent px-3 py-2 font-ui text-[9.5px] uppercase tracking-[0.12em] text-[var(--cc-ink-muted)] transition-colors hover:border-[color:var(--cc-ink-muted)] hover:text-[var(--cc-ink)]"
+          @click="addSceneClicked"
+        >
+          + Add scene
+        </button>
+
+        <p
+          class="border-t border-[color:var(--cc-border)] pt-2 font-ui text-[8.5px] uppercase leading-[1.5] tracking-[0.1em] text-[var(--cc-ink-ghost)]"
+        >
+          Double-click a scene to rename · F1-F5 recall the first five
+        </p>
       </div>
 
       <!-- Brand -->

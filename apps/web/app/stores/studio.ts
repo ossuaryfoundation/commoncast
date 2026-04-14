@@ -53,6 +53,20 @@ function emptyFeeds(layout: LayoutId): (string | null)[] {
   return Array.from({ length: getSlotCount(layout) }, () => null);
 }
 
+/** Slugify + de-dupe a name into a scene id that's stable-ish and URL-safe. */
+function makeSceneId(existing: ReadonlyArray<{ id: string }>, name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "scene";
+  const used = new Set(existing.map((s) => s.id));
+  if (!used.has(base)) return base;
+  let n = 2;
+  while (used.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
 function defaultScenes(): Scene[] {
   const s = (
     id: string,
@@ -109,6 +123,105 @@ export const useStudioStore = defineStore("studio", {
       const scene = this.scenes.find((s) => s.id === id);
       if (!scene) return;
       this.activeSceneId = id;
+    },
+    /**
+     * Append a new scene. `name` is required; `layout` defaults to grid.
+     * Overlays default to logo-on / others-off so the scene doesn't
+     * inherit anything unexpected from its neighbours.
+     */
+    addScene(opts: { name: string; layout?: LayoutId }): Scene {
+      const id = makeSceneId(this.scenes, opts.name);
+      const scene: Scene = {
+        id,
+        index: this.scenes.length + 1,
+        name: opts.name.trim() || `Scene ${this.scenes.length + 1}`,
+        shortcut: this.scenes.length < 5 ? `F${this.scenes.length + 1}` : "",
+        layout: opts.layout ?? "grid",
+        feeds: emptyFeeds(opts.layout ?? "grid"),
+        overlays: { logo: true, lowerThird: false, ticker: false },
+      };
+      this.scenes = [...this.scenes, scene];
+      // New scenes pick up whatever sources are already mounted in other
+      // scenes so they aren't blank on first select.
+      const referenced = new Set<string>();
+      for (const existing of this.scenes) {
+        for (const f of existing.feeds) if (f) referenced.add(f);
+      }
+      for (const sourceId of referenced) {
+        const empty = scene.feeds.findIndex((f) => f == null);
+        if (empty < 0) break;
+        scene.feeds[empty] = sourceId;
+      }
+      return scene;
+    },
+    /**
+     * Duplicate a scene. The copy is inserted immediately after its
+     * source and becomes the active scene. Feeds are carried over.
+     */
+    duplicateScene(id: string): Scene | null {
+      const idx = this.scenes.findIndex((s) => s.id === id);
+      if (idx < 0) return null;
+      const src = this.scenes[idx]!;
+      const copy: Scene = {
+        id: makeSceneId(this.scenes, `${src.name} copy`),
+        index: idx + 2,
+        name: `${src.name} copy`,
+        shortcut: "",
+        layout: src.layout,
+        feeds: [...src.feeds],
+        overlays: { ...src.overlays },
+      };
+      const next = [...this.scenes];
+      next.splice(idx + 1, 0, copy);
+      this.scenes = next;
+      this.reindexScenes();
+      this.activeSceneId = copy.id;
+      return copy;
+    },
+    renameScene(id: string, name: string): void {
+      const scene = this.scenes.find((s) => s.id === id);
+      if (!scene) return;
+      const next = name.trim();
+      if (!next) return;
+      scene.name = next;
+    },
+    /**
+     * Remove a scene. Refuses to remove the final scene (studio must
+     * always have at least one) and auto-picks a new active scene if
+     * the deleted one was active.
+     */
+    removeScene(id: string): void {
+      if (this.scenes.length <= 1) return;
+      const idx = this.scenes.findIndex((s) => s.id === id);
+      if (idx < 0) return;
+      const nextScenes = this.scenes.filter((s) => s.id !== id);
+      this.scenes = nextScenes;
+      this.reindexScenes();
+      if (this.activeSceneId === id) {
+        // Prefer the scene that used to sit at the same index; fall
+        // back to the last scene if we deleted the tail.
+        const fallback = nextScenes[Math.min(idx, nextScenes.length - 1)];
+        this.activeSceneId = fallback?.id ?? nextScenes[0]!.id;
+      }
+    },
+    /**
+     * Reassign `.index` to match array position (1-based) and rebuild
+     * the default F1-F5 shortcut mapping for the first five scenes.
+     */
+    reindexScenes(): void {
+      const next = this.scenes.map((scene, i) => ({
+        ...scene,
+        index: i + 1,
+        // Keep custom (non F1-F5) shortcuts as-is; refresh default ones
+        // to match the new position.
+        shortcut:
+          scene.shortcut && !/^F[1-5]$/.test(scene.shortcut)
+            ? scene.shortcut
+            : i < 5
+              ? `F${i + 1}`
+              : "",
+      }));
+      this.scenes = next;
     },
     /** Change the layout of a specific scene and resize its feeds array. */
     setSceneLayout(sceneId: string, layout: LayoutId) {
