@@ -53,6 +53,7 @@ import SourcesPanel from "~/components/studio/SourcesPanel.vue";
 import StudioStage from "~/components/studio/StudioStage.vue";
 import ControlsPanel from "~/components/studio/ControlsPanel.vue";
 import StatusBar from "~/components/studio/StatusBar.vue";
+import AudioMixerDock from "~/components/studio/AudioMixerDock.vue";
 
 definePageMeta({ layout: "studio" });
 
@@ -986,7 +987,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="grid h-full grid-rows-[44px_minmax(0,1fr)_32px] bg-[var(--cc-chalk)]">
+  <div
+    class="grid h-full grid-rows-[44px_minmax(0,1fr)_auto_32px] bg-[var(--cc-chalk)]"
+  >
     <TopToolbar />
     <div
       class="grid min-h-0 grid-cols-[240px_minmax(0,1fr)_280px] overflow-hidden"
@@ -995,6 +998,7 @@ onMounted(async () => {
       <StudioStage />
       <ControlsPanel />
     </div>
+    <AudioMixerDock />
     <StatusBar />
   </div>
 </template>
