@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STAGEBOX Architecture — CLASP + PixiJS + LVQR</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090d;
+  --surface: #0f1219;
+  --surface-2: #161b27;
+  --border: #222a3d;
+  --text: #dfe6f0;
+  --text-dim: #7889a8;
+  --clasp: #00e5c8;
+  --clasp-dim: rgba(0,229,200,0.12);
+  --pixi: #e74cff;
+  --pixi-dim: rgba(231,76,255,0.12);
+  --lvqr: #ff8c42;
+  --lvqr-dim: rgba(255,140,66,0.12);
+  --webrtc: #60a5fa;
+  --webrtc-dim: rgba(96,165,250,0.12);
+  --hot: #ff4757;
+  --warm: #ffd43b;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+  --display: 'Space Grotesk', sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.7; }
+.container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+/* hero */
+.hero { padding: 4rem 0 3rem; border-bottom: 1px solid var(--border); margin-bottom: 3rem; }
+.hero-tag { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+.hero-tag .t-clasp { color: var(--clasp); }
+.hero-tag .t-pixi { color: var(--pixi); }
+.hero-tag .t-lvqr { color: var(--lvqr); }
+.hero h1 { font-family: var(--display); font-size: clamp(2rem,5vw,3rem); font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+.hero p { font-size: 1.05rem; color: var(--text-dim); max-width: 720px; }
+
+/* section */
+section { margin-bottom: 3.5rem; }
+h2 { font-family: var(--display); font-size: 1.6rem; font-weight: 700; margin-bottom: 1.25rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); }
+h2 .n { font-family: var(--mono); font-size: 0.8rem; display: block; margin-bottom: 0.2rem; }
+h2 .n.clasp { color: var(--clasp); }
+h2 .n.pixi { color: var(--pixi); }
+h2 .n.lvqr { color: var(--lvqr); }
+h2 .n.webrtc { color: var(--webrtc); }
+h3 { font-family: var(--display); font-size: 1.15rem; font-weight: 600; margin: 1.75rem 0 0.75rem; color: var(--warm); }
+h4 { font-family: var(--display); font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.6rem; }
+p { margin-bottom: 0.9rem; }
+a { color: var(--clasp); }
+
+/* the big thesis box */
+.thesis { background: linear-gradient(135deg, rgba(0,229,200,0.06) 0%, rgba(231,76,255,0.04) 50%, rgba(255,140,66,0.06) 100%); border: 1px solid var(--border); border-radius: 10px; padding: 1.75rem 2rem; margin: 2rem 0; }
+.thesis .thesis-title { font-family: var(--display); font-weight: 700; font-size: 1.1rem; margin-bottom: 0.75rem; }
+.thesis p { font-size: 0.95rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+.thesis p:last-child { margin-bottom: 0; }
+.thesis strong { color: var(--text); }
+
+/* code */
+.code { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.25rem; margin: 1.25rem 0; overflow-x: auto; font-family: var(--mono); font-size: 0.78rem; line-height: 1.65; color: var(--text-dim); white-space: pre; }
+.c { color: #4a5b7a; } /* comment */
+.k { color: var(--clasp); } /* key/keyword */
+.v { color: var(--warm); } /* value */
+.t { color: var(--pixi); } /* type */
+.f { color: var(--lvqr); } /* function */
+
+/* arch diagram */
+.arch { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 2rem; margin: 2rem 0; overflow-x: auto; }
+.arch-label { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
+.arch-row { display: flex; gap: 0.65rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.arch-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.7rem 0.9rem; flex: 1; min-width: 130px; transition: border-color 0.2s; }
+.arch-box:hover { border-color: var(--text-dim); }
+.arch-box .bt { font-family: var(--mono); font-weight: 600; font-size: 0.72rem; margin-bottom: 0.2rem; }
+.arch-box .bd { font-size: 0.7rem; color: var(--text-dim); line-height: 1.4; }
+.arch-box.clasp { border-left: 3px solid var(--clasp); }
+.arch-box.pixi { border-left: 3px solid var(--pixi); }
+.arch-box.lvqr { border-left: 3px solid var(--lvqr); }
+.arch-box.webrtc { border-left: 3px solid var(--webrtc); }
+.arch-box.hot { border-left: 3px solid var(--hot); }
+.arch-arrow { text-align: center; color: var(--text-dim); font-size: 1.1rem; margin: 0.15rem 0; opacity: 0.4; }
+.arch-connector { text-align: center; font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); margin: 0.2rem 0; letter-spacing: 0.1em; }
+
+/* callout */
+.callout { border-left: 3px solid; border-radius: 0 6px 6px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; font-size: 0.9rem; }
+.callout.clasp { background: var(--clasp-dim); border-color: var(--clasp); }
+.callout.pixi { background: var(--pixi-dim); border-color: var(--pixi); }
+.callout.lvqr { background: var(--lvqr-dim); border-color: var(--lvqr); }
+.callout.hot { background: rgba(255,71,87,0.08); border-color: var(--hot); }
+.callout .cl { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.35rem; font-weight: 600; }
+.callout.clasp .cl { color: var(--clasp); }
+.callout.pixi .cl { color: var(--pixi); }
+.callout.lvqr .cl { color: var(--lvqr); }
+.callout.hot .cl { color: var(--hot); }
+
+/* inline list */
+.il { margin: 0.5rem 0 1rem; padding-left: 1.25rem; }
+.il li { margin-bottom: 0.35rem; font-size: 0.9rem; color: var(--text-dim); }
+.il li strong { color: var(--text); }
+
+/* tag */
+.tag { display: inline-block; font-family: var(--mono); font-size: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: middle; }
+.tag.clasp { background: var(--clasp-dim); color: var(--clasp); border: 1px solid rgba(0,229,200,0.3); }
+.tag.pixi { background: var(--pixi-dim); color: var(--pixi); border: 1px solid rgba(231,76,255,0.3); }
+.tag.lvqr { background: var(--lvqr-dim); color: var(--lvqr); border: 1px solid rgba(255,140,66,0.3); }
+.tag.webrtc { background: var(--webrtc-dim); color: var(--webrtc); border: 1px solid rgba(96,165,250,0.3); }
+
+/* table */
+.tw { overflow-x: auto; margin: 1.25rem 0; border-radius: 8px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+thead { background: var(--surface-2); }
+th { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.65rem 0.9rem; text-align: left; white-space: nowrap; }
+th.clasp { color: var(--clasp); }
+th.pixi { color: var(--pixi); }
+th.lvqr { color: var(--lvqr); }
+td { padding: 0.55rem 0.9rem; border-top: 1px solid var(--border); color: var(--text-dim); }
+tr:hover td { background: var(--surface); }
+
+.footer { border-top: 1px solid var(--border); padding-top: 2rem; margin-top: 4rem; color: var(--text-dim); font-size: 0.78rem; text-align: center; }
+
+@media (max-width: 640px) {
+  .arch-row { flex-direction: column; }
+  .container { padding: 1.25rem; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="hero">
+  <div class="hero-tag">
+    <span class="t-clasp">CLASP // signaling + state</span>
+    <span class="t-pixi">PixiJS // compositing</span>
+    <span class="t-lvqr">LVQR // broadcast delivery</span>
+  </div>
+  <h1>Open Source StreamYard on Your Own Stack</h1>
+  <p>A browser-based live production studio using CLASP for real-time state and WebRTC signaling, PixiJS/vue3-pixi for GPU-accelerated compositing, and LVQR for broadcast output. No headless Chrome servers. No third-party infrastructure. Your protocols, your code, top to bottom.</p>
+</header>
+
+<!-- ═══ THE THESIS ═══ -->
+<div class="thesis">
+  <div class="thesis-title">The Core Insight</div>
+  <p>StreamYard composites video on the server using headless Chrome (3-4 CPU cores per broadcast). <strong>We composite on the host's GPU using PixiJS</strong>, which you already know inside out from LumenCanvas. The composited canvas gets captured via <code>captureStream()</code>, encoded with WebCodecs, and piped into LVQR's WebSocket ingest, which is already proven to work in the LVQR test-app.</p>
+  <p>CLASP replaces both the signaling server AND the state management layer. The AudioSpace/Clubhouse clone already demonstrates CLASP carrying WebRTC SDP offers/answers/ICE candidates through <code>clasp.set()</code> on signal addresses. That exact pattern scales to video. The scene graph (layouts, overlays, banners, who's on stage) lives as CLASP state, subscribed to by the compositor.</p>
+  <p>LVQR replaces RTMP fan-out with MoQ/QUIC. Zero-copy fan-out to N viewers. WebSocket fallback for browsers without WebTransport. RTMP egress when you need YouTube/Twitch compatibility.</p>
+  <p><strong>Three projects you built. One studio.</strong></p>
+</div>
+
+<!-- ═══ SECTION 1: HOW IT MAPS ═══ -->
+<section>
+<h2><span class="n clasp">01</span>How Each Piece Maps</h2>
+
+<div class="tw">
+<table>
+<thead>
+<tr>
+  <th>StreamYard Feature</th>
+  <th class="clasp">CLASP Handles</th>
+  <th class="pixi">PixiJS Handles</th>
+  <th class="lvqr">LVQR Handles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Guest join via link</td>
+  <td>Auth (CPSK guest tokens), presence state, WebRTC signaling</td>
+  <td>--</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Backstage / greenroom</td>
+  <td>Room state: <code>/studio/{id}/participants/{pid}/stage</code> = backstage|live</td>
+  <td>Only renders participants with stage=live</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Layout switching</td>
+  <td>Scene graph: <code>/studio/{id}/scene/layout</code> = "grid"|"solo"|"pip"</td>
+  <td>Reads layout, repositions video textures on canvas</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Overlays (logos, lower thirds)</td>
+  <td>Overlay state: <code>/studio/{id}/overlays/**</code></td>
+  <td>Renders overlay sprites/text on the PixiJS stage</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Chat overlay</td>
+  <td>Chat pipeline: <code>/studio/{id}/chat/**</code> + featured flag</td>
+  <td>Renders featured comments as styled text containers</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Screen share</td>
+  <td>Signals screen share track availability</td>
+  <td>Renders screen share as a video texture in layout</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Multi-platform streaming</td>
+  <td>Destination state: <code>/studio/{id}/destinations/**</code></td>
+  <td>--</td>
+  <td>Composited canvas -> WebCodecs -> LVQR ingest -> MoQ fan-out + RTMP egress</td>
+</tr>
+<tr>
+  <td>Recording</td>
+  <td>Recording state flags</td>
+  <td>--</td>
+  <td>lvqr-record subscribes to broadcast, writes fMP4 to disk</td>
+</tr>
+<tr>
+  <td>Speaking indicators</td>
+  <td>Stream signals: <code>/studio/{id}/speaking/{pid}</code> (like AudioSpace)</td>
+  <td>Highlight ring animation on active speaker's video texture</td>
+  <td>--</td>
+</tr>
+<tr>
+  <td>Scenes (saved presets)</td>
+  <td>Scene snapshots stored in CLASP journal, recalled via <code>clasp.set()</code></td>
+  <td>Reacts to scene graph change, transitions between states</td>
+  <td>--</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- ═══ SECTION 2: ARCHITECTURE ═══ -->
+<section>
+<h2><span class="n pixi">02</span>System Architecture</h2>
+
+<div class="arch">
+  <div class="arch-label">Host Browser (the producer's machine)</div>
+  <div class="arch-row">
+    <div class="arch-box clasp">
+      <div class="bt">Studio UI (Vue3)</div>
+      <div class="bd">Layout picker, overlay controls, guest management, scene presets. Writes to CLASP scene graph.</div>
+    </div>
+    <div class="arch-box pixi">
+      <div class="bt">PixiJS Compositor (vue3-pixi)</div>
+      <div class="bd">Renders video textures + overlays + text onto a WebGL canvas. Reads scene graph from CLASP subscriptions. GPU-accelerated.</div>
+    </div>
+  </div>
+  
+  <div class="arch-connector">canvas.captureStream(30) + VideoEncoder (H.264) + AudioContext.destination</div>
+  <div class="arch-arrow">&#8595;</div>
+  
+  <div class="arch-row">
+    <div class="arch-box lvqr">
+      <div class="bt">WebSocket Ingest to LVQR</div>
+      <div class="bd">Encoded H.264 frames sent over WS to lvqr-ingest. Same wire format as LVQR test-app: [type][ts][payload]. Already works.</div>
+    </div>
+  </div>
+
+  <div class="arch-arrow">&#8595;</div>
+  <div class="arch-label">Server (single box or distributed)</div>
+  
+  <div class="arch-row">
+    <div class="arch-box clasp">
+      <div class="bt">CLASP Relay</div>
+      <div class="bd">relay.clasp.to or self-hosted. Carries: scene graph state, WebRTC signaling (SDP/ICE), participant presence, chat, overlay state, speaking indicators. All real-time.</div>
+    </div>
+    <div class="arch-box lvqr">
+      <div class="bt">LVQR Relay</div>
+      <div class="bd">MoQ fan-out of composited broadcast. Zero-copy to N viewers via QUIC/WebTransport. WebSocket fallback. Optional RTMP egress to YouTube/Twitch.</div>
+    </div>
+  </div>
+  
+  <div class="arch-arrow">&#8595;</div>
+  <div class="arch-label">Participants + Viewers</div>
+  
+  <div class="arch-row">
+    <div class="arch-box webrtc">
+      <div class="bt">Guest Browsers</div>
+      <div class="bd">Join via link. Connect to CLASP for signaling. Establish WebRTC PeerConnections to host for camera/mic (P2P, signaled through CLASP). Zero downloads.</div>
+    </div>
+    <div class="arch-box lvqr">
+      <div class="bt">Viewer Browsers</div>
+      <div class="bd">Watch the composited broadcast via LVQR player (<code>&lt;lvqr-player&gt;</code> web component). MSE playback. No WebRTC needed for viewers.</div>
+    </div>
+    <div class="arch-box hot">
+      <div class="bt">Platform Destinations</div>
+      <div class="bd">YouTube, Twitch, etc. via RTMP egress from LVQR (when implemented in Tier 2 roadmap).</div>
+    </div>
+  </div>
+</div>
+
+<h3>Why Client-Side Compositing Works Here</h3>
+
+<p>The obvious question: "Isn't server-side compositing more reliable?" Yes, for a SaaS product serving thousands of concurrent broadcasts. But for an open-source self-hosted tool, client-side compositing has massive advantages:</p>
+
+<ul class="il">
+  <li><strong>No GPU servers needed.</strong> The host's browser GPU does the compositing. A modern laptop handles 1080p30 PixiJS rendering without breaking a sweat. LumenCanvas already proves this with projection mapping, which is more demanding than a grid of video feeds.</li>
+  <li><strong>The compositor IS the preview.</strong> What the host sees in the studio IS the broadcast output. No "preview vs actual" desync. The PixiJS canvas is both the WYSIWYG editor and the final output.</li>
+  <li><strong>WebCodecs is production-ready.</strong> The LVQR test-app already demonstrates the pipeline: MediaStreamTrackProcessor reads frames, VideoEncoder encodes H.264, binary frames go over WebSocket to LVQR. This exact pipeline works with <code>canvas.captureStream()</code> as the source instead of <code>getUserMedia()</code>.</li>
+  <li><strong>Zero server-side media processing.</strong> LVQR's relay is just passing bytes through. ref-counted, zero-copy fan-out. The server cost is negligible.</li>
+</ul>
+
+<div class="callout hot">
+  <div class="cl">Tradeoff</div>
+  Client-side compositing means the host needs a capable machine and stable upload bandwidth (~6 Mbps for 1080p30). If the host's laptop chokes, the broadcast degrades. For a HeatSync Labs stream or a LumenCanvas demo, this is fine. For enterprise SaaS, you'd want the option to offload to a server-side compositor. The scene graph abstraction makes this swap possible later without changing anything else.
+</div>
+</section>
+
+<!-- ═══ SECTION 3: CLASP SCENE GRAPH ═══ -->
+<section>
+<h2><span class="n clasp">03</span>CLASP as the Scene Graph</h2>
+
+<p>CLASP's address-based state model maps naturally to a broadcast scene graph. Every element on screen is a CLASP address. The compositor subscribes to the whole tree. The studio UI writes to it. Plugins read and write to it.</p>
+
+<div class="code"><span class="c">// The entire broadcast state lives in CLASP</span>
+<span class="c">// Host studio UI writes these via clasp.set()</span>
+<span class="c">// PixiJS compositor subscribes via clasp.on()</span>
+
+<span class="c">// Layout</span>
+<span class="k">/studio/abc/scene/layout</span>         <span class="v">"grid-2x2"</span>
+<span class="k">/studio/abc/scene/transition</span>     <span class="v">{ type: "crossfade", ms: 300 }</span>
+<span class="k">/studio/abc/scene/background</span>     <span class="v">{ type: "image", src: "/bg.jpg" }</span>
+
+<span class="c">// Participants (presence + staging)</span>
+<span class="k">/studio/abc/participants/p1/name</span>  <span class="v">"Moheeb"</span>
+<span class="k">/studio/abc/participants/p1/stage</span> <span class="v">"live"</span>        <span class="c">// "backstage" | "live"</span>
+<span class="k">/studio/abc/participants/p1/slot</span>  <span class="v">0</span>
+<span class="k">/studio/abc/participants/p1/muted</span> <span class="v">false</span>
+<span class="k">/studio/abc/participants/p2/name</span>  <span class="v">"Guest"</span>
+<span class="k">/studio/abc/participants/p2/stage</span> <span class="v">"backstage"</span>
+
+<span class="c">// WebRTC signaling (same pattern as AudioSpace)</span>
+<span class="k">/studio/abc/signal/p2/p1</span>         <span class="v">{ type: "offer", sdp: "..." }</span>
+<span class="k">/studio/abc/signal/p1/p2</span>         <span class="v">{ type: "answer", sdp: "..." }</span>
+
+<span class="c">// Overlays</span>
+<span class="k">/studio/abc/overlays/logo/src</span>    <span class="v">"/logo.png"</span>
+<span class="k">/studio/abc/overlays/logo/pos</span>    <span class="v">"top-right"</span>
+<span class="k">/studio/abc/overlays/logo/visible</span> <span class="v">true</span>
+<span class="k">/studio/abc/overlays/lower/text</span>  <span class="v">"Moheeb Zara — LumenCanvas"</span>
+<span class="k">/studio/abc/overlays/lower/style</span> <span class="v">"banner-teal"</span>
+<span class="k">/studio/abc/overlays/lower/visible</span> <span class="v">true</span>
+
+<span class="c">// Speaking indicators (stream signals, like AudioSpace)</span>
+<span class="k">/studio/abc/speaking/p1</span>          <span class="v">{ speaking: true, volume: 0.72 }</span>   <span class="c">// clasp.stream()</span>
+
+<span class="c">// Chat</span>
+<span class="k">/studio/abc/chat/msg-42</span>          <span class="v">{ from: "viewer", text: "love it!", platform: "youtube" }</span>
+<span class="k">/studio/abc/chat/featured</span>        <span class="v">"msg-42"</span>   <span class="c">// set to show on screen</span>
+
+<span class="c">// Broadcast output state</span>
+<span class="k">/studio/abc/broadcast/live</span>        <span class="v">true</span>
+<span class="k">/studio/abc/broadcast/recording</span>   <span class="v">true</span>
+<span class="k">/studio/abc/destinations/yt/key</span>   <span class="v">"xxxx-xxxx-xxxx"</span>
+<span class="k">/studio/abc/destinations/yt/status</span> <span class="v">"streaming"</span></div>
+
+<div class="callout clasp">
+  <div class="cl">Why CLASP and not just WebSockets</div>
+  Plain WebSockets give you a message pipe. CLASP gives you <strong>stateful addresses with subscriptions, wildcard patterns, atomic bundles, and time-synchronized scheduling</strong>. When the host clicks "switch to solo layout," that's a single <code>clasp.set()</code> that instantly propagates to the compositor, every guest's UI, and any plugins subscribed to <code>/studio/*/scene/**</code>. No custom pub/sub infrastructure to build. No state reconciliation logic. CLASP's revision-based conflict resolution handles simultaneous edits (multiple producers). The journal gives you undo and scene recall for free.
+</div>
+
+<h3>Scenes as CLASP Bundles</h3>
+
+<p>A "scene" (saved preset) is just a CLASP bundle -- an atomic set of changes applied together:</p>
+
+<div class="code"><span class="c">// Save current scene</span>
+<span class="k">const</span> sceneSnapshot = <span class="k">await</span> clasp.<span class="f">snapshot</span>(<span class="v">'/studio/abc/scene/**'</span>);
+<span class="k">await</span> clasp.<span class="f">set</span>(<span class="v">'/studio/abc/presets/interview'</span>, sceneSnapshot);
+
+<span class="c">// Recall scene (atomic transition)</span>
+<span class="k">const</span> preset = <span class="k">await</span> clasp.<span class="f">get</span>(<span class="v">'/studio/abc/presets/interview'</span>);
+clasp.<span class="f">bundle</span>(preset.map(([addr, val]) => ({ <span class="k">set</span>: [addr, val] })));</div>
+
+<p>The compositor sees a burst of scene graph changes arrive atomically. The transition system (crossfade, cut, wipe) is handled by the PixiJS renderer, triggered by the transition config at <code>/studio/abc/scene/transition</code>.</p>
+</section>
+
+<!-- ═══ SECTION 4: PIXI COMPOSITOR ═══ -->
+<section>
+<h2><span class="n pixi">04</span>PixiJS Compositor</h2>
+
+<p>The compositor is a vue3-pixi application that renders the broadcast frame. It's conceptually identical to how LumenCanvas renders projection mapping layers -- except the "layers" are video feeds, overlays, and text instead of image effects.</p>
+
+<h3>Compositor Architecture</h3>
+
+<div class="code"><span class="c">// Simplified compositor structure (vue3-pixi)</span>
+<span class="c">// Each video feed becomes a PixiJS VideoTexture</span>
+<span class="c">// Layout engine positions them according to scene graph</span>
+
+&lt;<span class="k">template</span>&gt;
+  &lt;<span class="k">Application</span> :width=<span class="v">"1920"</span> :height=<span class="v">"1080"</span> ref=<span class="v">"app"</span>&gt;
+    <span class="c">&lt;!-- Background layer --&gt;</span>
+    &lt;<span class="k">Sprite</span> v-if=<span class="v">"scene.background"</span> :texture=<span class="v">"bgTexture"</span> /&gt;
+
+    <span class="c">&lt;!-- Participant video feeds (positioned by layout engine) --&gt;</span>
+    &lt;<span class="k">Container</span> v-for=<span class="v">"p in liveParticipants"</span> :key=<span class="v">"p.id"</span>
+      :x=<span class="v">"layout.slots[p.slot].x"</span>
+      :y=<span class="v">"layout.slots[p.slot].y"</span>&gt;
+
+      <span class="c">&lt;!-- Rounded rectangle mask for camera shape --&gt;</span>
+      &lt;<span class="k">Graphics</span> @render=<span class="v">"drawMask(p)"</span> /&gt;
+
+      <span class="c">&lt;!-- Video texture from WebRTC MediaStream --&gt;</span>
+      &lt;<span class="k">Sprite</span>
+        :texture=<span class="v">"videoTextures[p.id]"</span>
+        :width=<span class="v">"layout.slots[p.slot].w"</span>
+        :height=<span class="v">"layout.slots[p.slot].h"</span>
+        :mask=<span class="v">"masks[p.id]"</span> /&gt;
+
+      <span class="c">&lt;!-- Name plate --&gt;</span>
+      &lt;<span class="k">Text</span> :text=<span class="v">"p.name"</span> :style=<span class="v">"nameStyle"</span>
+        :x=<span class="v">"layout.slots[p.slot].w / 2"</span>
+        :y=<span class="v">"layout.slots[p.slot].h - 32"</span> /&gt;
+
+      <span class="c">&lt;!-- Speaking ring (animated via CLASP stream signal) --&gt;</span>
+      &lt;<span class="k">Graphics</span> v-if=<span class="v">"speaking[p.id]"</span> @render=<span class="v">"drawSpeakingRing(p)"</span> /&gt;
+    &lt;/<span class="k">Container</span>&gt;
+
+    <span class="c">&lt;!-- Overlay layers --&gt;</span>
+    &lt;<span class="k">Sprite</span> v-for=<span class="v">"o in visibleOverlays"</span> :key=<span class="v">"o.id"</span>
+      :texture=<span class="v">"overlayTextures[o.id]"</span>
+      :x=<span class="v">"overlayPos(o).x"</span> :y=<span class="v">"overlayPos(o).y"</span> /&gt;
+
+    <span class="c">&lt;!-- Lower third / banner --&gt;</span>
+    &lt;<span class="k">BannerOverlay</span> v-if=<span class="v">"scene.overlays?.lower?.visible"</span>
+      :text=<span class="v">"scene.overlays.lower.text"</span>
+      :style-name=<span class="v">"scene.overlays.lower.style"</span> /&gt;
+
+    <span class="c">&lt;!-- Featured chat comment --&gt;</span>
+    &lt;<span class="k">ChatBubble</span> v-if=<span class="v">"featuredChat"</span> :message=<span class="v">"featuredChat"</span> /&gt;
+  &lt;/<span class="k">Application</span>&gt;
+&lt;/<span class="k">template</span>&gt;</div>
+
+<h3>Video Textures from WebRTC Streams</h3>
+
+<p>When a guest's WebRTC PeerConnection fires <code>ontrack</code>, the MediaStream gets turned into a PixiJS VideoTexture:</p>
+
+<div class="code"><span class="c">// When WebRTC track arrives (signaled through CLASP)</span>
+pc.ontrack = (ev) => {
+  <span class="k">const</span> videoEl = document.createElement(<span class="v">'video'</span>);
+  videoEl.srcObject = ev.streams[<span class="v">0</span>];
+  videoEl.autoplay = <span class="v">true</span>;
+  videoEl.playsInline = <span class="v">true</span>;
+  videoEl.muted = <span class="v">true</span>;  <span class="c">// audio handled separately</span>
+  <span class="k">await</span> videoEl.play();
+
+  <span class="c">// Create PixiJS texture from the video element</span>
+  videoTextures[participantId] = PIXI.Texture.from(videoEl);
+  <span class="c">// PixiJS auto-updates the texture each frame</span>
+};</div>
+
+<h3>Canvas Capture to LVQR</h3>
+
+<p>The compositor's canvas output gets captured and sent to LVQR using the same pipeline the LVQR test-app already uses:</p>
+
+<div class="code"><span class="c">// Capture the PixiJS canvas as a MediaStream</span>
+<span class="k">const</span> canvas = pixiApp.canvas;   <span class="c">// PixiJS v8 .canvas property</span>
+<span class="k">const</span> stream = canvas.captureStream(<span class="v">30</span>);  <span class="c">// 30fps</span>
+
+<span class="c">// Mix audio from all WebRTC participants</span>
+<span class="k">const</span> audioCtx = <span class="k">new</span> AudioContext();
+<span class="k">const</span> destination = audioCtx.createMediaStreamDestination();
+<span class="k">for</span> (<span class="k">const</span> peer <span class="k">of</span> Object.values(peers)) {
+  <span class="k">const</span> source = audioCtx.createMediaStreamSource(peer.stream);
+  source.connect(destination);
+}
+<span class="c">// Add audio track to the canvas stream</span>
+destination.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+
+<span class="c">// Encode with WebCodecs (same pattern as LVQR test-app)</span>
+<span class="k">const</span> videoTrack = stream.getVideoTracks()[<span class="v">0</span>];
+<span class="k">const</span> processor = <span class="k">new</span> MediaStreamTrackProcessor({ track: videoTrack });
+<span class="k">const</span> reader = processor.readable.getReader();
+
+<span class="k">const</span> encoder = <span class="k">new</span> VideoEncoder({
+  output: (chunk, meta) => {
+    <span class="c">// Send to LVQR ingest over WebSocket</span>
+    <span class="c">// Wire format: [u8 type][u32 ts][payload]</span>
+    sendToLvqr(chunk, meta);
+  },
+  error: (e) => console.error(e)
+});
+
+encoder.configure({
+  codec: <span class="v">'avc1.42C028'</span>,
+  width: <span class="v">1920</span>, height: <span class="v">1080</span>,
+  bitrate: <span class="v">4_500_000</span>,
+  framerate: <span class="v">30</span>,
+  latencyMode: <span class="v">'realtime'</span>,
+  avc: { format: <span class="v">'avc'</span> }
+});
+
+<span class="c">// Feed frames (runs in a loop)</span>
+<span class="k">while</span> (broadcasting) {
+  <span class="k">const</span> { value: frame } = <span class="k">await</span> reader.read();
+  <span class="k">if</span> (frame) {
+    encoder.encode(frame, { keyFrame: frameCount++ % <span class="v">60</span> === <span class="v">0</span> });
+    frame.close();
+  }
+}</div>
+
+<div class="callout pixi">
+  <div class="cl">LumenCanvas Precedent</div>
+  This is the same rendering architecture as LumenCanvas. PixiJS v8 with vue3-pixi, scene graph driven, GPU-accelerated. The only new piece is capturing the canvas output and encoding it, which is a well-documented WebCodecs pattern that LVQR's test-app already implements. The compositor is essentially a specialized LumenCanvas "show" where the layers are live video feeds instead of images and effects.
+</div>
+</section>
+
+<!-- ═══ SECTION 5: LVQR OUTPUT ═══ -->
+<section>
+<h2><span class="n lvqr">05</span>LVQR Broadcast Output</h2>
+
+<p>The composited H.264 stream enters LVQR through the existing WebSocket ingest endpoint (<code>/ingest/{broadcast}</code>). From there, LVQR handles everything:</p>
+
+<ul class="il">
+  <li><strong>Remuxing:</strong> Incoming H.264 AVCC frames get wrapped in fMP4 (CMAF) segments by lvqr-ingest. This already works.</li>
+  <li><strong>MoQ Fan-Out:</strong> The MoQ relay distributes fMP4 segments to all subscribers via QUIC/WebTransport. Zero-copy ref-counted buffers. Adding a viewer costs a refcount increment, not a data copy.</li>
+  <li><strong>WebSocket Fallback:</strong> Browsers without WebTransport get fMP4 frames over WebSocket via <code>/ws/{broadcast}</code>. Already implemented.</li>
+  <li><strong>Recording:</strong> lvqr-record subscribes to the broadcast and writes fMP4 to disk. Already works.</li>
+  <li><strong>Viewer Playback:</strong> The <code>&lt;lvqr-player&gt;</code> web component handles MSE playback. Drop it in a page and point it at the relay.</li>
+</ul>
+
+<h3>What LVQR Needs for Full StreamYard Parity</h3>
+
+<p>From the LVQR roadmap, the Tier 2 features that matter for this project:</p>
+
+<ul class="il">
+  <li><strong>RTMP Egress</strong> (Tier 2.1 on roadmap): Re-stream the MoQ broadcast to YouTube/Twitch/Facebook RTMP endpoints. This is the biggest gap for StreamYard parity. Without it, viewers can only watch through the LVQR player or WebSocket endpoint.</li>
+  <li><strong>Audio Track Support:</strong> Currently the test-app only streams video. AAC encoding via WebCodecs is not yet widely supported. Workaround: encode audio separately and push as a second track, or use MediaRecorder for the audio track and WebCodecs for video.</li>
+  <li><strong>Multi-Codec:</strong> HEVC, VP9, AV1 support (Tier 2.2). Not critical for launch but nice for efficiency.</li>
+  <li><strong>LL-HLS Egress:</strong> For embedding on websites where you want broader compatibility than WebTransport.</li>
+</ul>
+
+<div class="callout lvqr">
+  <div class="cl">Realistic Launch Path</div>
+  LVQR can serve viewers directly today (MoQ + WebSocket fallback). RTMP egress to YouTube/Twitch is the priority Tier 2 feature. Until that ships, you could add a lightweight FFmpeg sidecar that subscribes to the LVQR WebSocket output and re-streams to RTMP destinations. Not elegant, but functional as a bridge.
+</div>
+</section>
+
+<!-- ═══ SECTION 6: DATA FLOW ═══ -->
+<section>
+<h2><span class="n webrtc">06</span>Complete Data Flow</h2>
+
+<div class="arch">
+  <div class="arch-label">1. Guest Joins</div>
+  <div class="arch-row">
+    <div class="arch-box clasp">
+      <div class="bt">Guest opens invite link</div>
+      <div class="bd">Hits CLASP auth endpoint, gets guest CPSK token. Connects to CLASP relay. Sets presence at /studio/{id}/participants/{pid}.</div>
+    </div>
+  </div>
+  <div class="arch-arrow">&#8595;</div>
+
+  <div class="arch-label">2. WebRTC Media Setup (signaled through CLASP)</div>
+  <div class="arch-row">
+    <div class="arch-box clasp">
+      <div class="bt">SDP Exchange via CLASP</div>
+      <div class="bd">Guest creates offer, clasp.set('/studio/{id}/signal/{host}/{guest}', {type:'offer', sdp:...}). Host subscribes, creates answer, sends back. ICE candidates flow the same way. Exact pattern from AudioSpace.</div>
+    </div>
+    <div class="arch-box webrtc">
+      <div class="bt">P2P Video/Audio</div>
+      <div class="bd">WebRTC PeerConnection established. Camera/mic media flows directly between guest and host browser. P2P or via TURN if needed.</div>
+    </div>
+  </div>
+  <div class="arch-arrow">&#8595;</div>
+
+  <div class="arch-label">3. Host Composites</div>
+  <div class="arch-row">
+    <div class="arch-box pixi">
+      <div class="bt">PixiJS Renders Frame</div>
+      <div class="bd">WebRTC MediaStreams become PixiJS video textures. Layout engine positions them. Overlays, banners, logos rendered on top. Scene graph from CLASP drives everything. All on the host's GPU.</div>
+    </div>
+  </div>
+  <div class="arch-arrow">&#8595;</div>
+
+  <div class="arch-label">4. Encode + Push to LVQR</div>
+  <div class="arch-row">
+    <div class="arch-box lvqr">
+      <div class="bt">canvas.captureStream() -> WebCodecs -> LVQR</div>
+      <div class="bd">Captured canvas frames encoded to H.264 via VideoEncoder. Binary frames sent to LVQR's /ingest/{broadcast} WebSocket. Audio mixed via AudioContext and sent as separate track.</div>
+    </div>
+  </div>
+  <div class="arch-arrow">&#8595;</div>
+
+  <div class="arch-label">5. Distribution</div>
+  <div class="arch-row">
+    <div class="arch-box lvqr">
+      <div class="bt">MoQ Fan-Out</div>
+      <div class="bd">LVQR relay distributes fMP4 to viewers via WebTransport (sub-second latency) or WebSocket fallback.</div>
+    </div>
+    <div class="arch-box hot">
+      <div class="bt">RTMP Egress (future)</div>
+      <div class="bd">Re-stream to YouTube/Twitch/custom RTMP. Or FFmpeg sidecar as interim bridge.</div>
+    </div>
+    <div class="arch-box lvqr">
+      <div class="bt">lvqr-record</div>
+      <div class="bd">Subscribes to broadcast, writes fMP4 segments to disk. Composite recording of exactly what viewers see.</div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ═══ SECTION 7: SCALING ═══ -->
+<section>
+<h2><span class="n clasp">07</span>Scaling Considerations</h2>
+
+<h3>Participant Limit</h3>
+<p>WebRTC P2P mesh (as used in AudioSpace) works for up to ~8 participants with video, ~15 with audio only. Each participant maintains a PeerConnection to every other participant. For a live production studio where you typically have 2-6 guests on screen, this is fine. If you need more, you'd add an SFU (LiveKit or mediasoup) as the media transport while keeping CLASP for signaling and state. The CLASP-based signaling pattern doesn't change, you just point the PeerConnections at the SFU instead of P2P.</p>
+
+<h3>Viewer Scale</h3>
+<p>Viewer scale is entirely LVQR's problem, not the compositor's. LVQR's zero-copy fan-out means a single relay can serve hundreds of concurrent viewers. The mesh topology planner (lvqr-mesh) can distribute viewer load to peer relays for larger audiences. And RTMP egress offloads to YouTube/Twitch's CDN for massive scale.</p>
+
+<h3>Single-Node Deployment</h3>
+<div class="code"><span class="c"># Everything on one box: CLASP relay + LVQR relay</span>
+<span class="c"># The host's browser does all compositing</span>
+<span class="c"># Server CPU load is minimal: just routing signals + bytes</span>
+
+docker-compose up
+  <span class="c"># clasp-relay:  port 7330 (WS) + 7350 (auth)</span>
+  <span class="c"># lvqr serve:   port 4443 (MoQ) + 8080 (admin/WS)</span>
+  <span class="c"># nginx:        port 443 (reverse proxy + TLS)</span></div>
+
+<h3>Resource Budget</h3>
+<div class="tw">
+<table>
+<thead>
+<tr><th>Component</th><th>CPU</th><th>RAM</th><th>Bandwidth</th></tr>
+</thead>
+<tbody>
+<tr><td>CLASP relay</td><td>0.1 core (mostly idle)</td><td>~50 MB</td><td>Negligible (small signals)</td></tr>
+<tr><td>LVQR relay</td><td>0.2-0.5 core</td><td>~100 MB</td><td>~6 Mbps out per viewer</td></tr>
+<tr><td>Host browser (compositor)</td><td>1-2 cores + GPU</td><td>~500 MB</td><td>~6 Mbps upload</td></tr>
+<tr><td>Total server</td><td><strong>~1 core</strong></td><td><strong>~200 MB</strong></td><td>Per-viewer only</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Compare this to the LiveKit Egress approach (3-4 cores + 1-2 GB RAM per broadcast on the server). Client-side compositing means your server is just routing bytes. A $5/month VPS handles it.</p>
+</section>
+
+<!-- ═══ SECTION 8: WHAT TO BUILD ═══ -->
+<section>
+<h2><span class="n pixi">08</span>What Actually Needs to Be Built</h2>
+
+<h3>Already Exists (Use As-Is)</h3>
+<ul class="il">
+  <li><strong>CLASP relay + JS SDK</strong> <span class="tag clasp">ready</span> -- WebSocket transport, state management, subscriptions, bundles, auth, journal, rooms</li>
+  <li><strong>CLASP WebRTC signaling pattern</strong> <span class="tag clasp">ready</span> -- Proven in AudioSpace clone. SDP/ICE exchange over CLASP addresses</li>
+  <li><strong>LVQR ingest + relay</strong> <span class="tag lvqr">ready</span> -- RTMP and WebSocket ingest, MoQ fan-out, WebSocket fallback, recording</li>
+  <li><strong>LVQR browser WebCodecs pipeline</strong> <span class="tag lvqr">ready</span> -- VideoEncoder -> WebSocket -> LVQR. Working in test-app</li>
+  <li><strong>@lvqr/player web component</strong> <span class="tag lvqr">ready</span> -- MSE playback for viewers</li>
+  <li><strong>PixiJS v8 + vue3-pixi</strong> <span class="tag pixi">ready</span> -- Rendering engine. Deep expertise from LumenCanvas</li>
+</ul>
+
+<h3>New Code Required</h3>
+<ul class="il">
+  <li><strong>Studio UI</strong> <span class="tag pixi">build</span> -- Vue3 application. Layout picker, overlay panel, guest management, scene presets, chat panel. The control surface. This is the biggest chunk of new work but it's pure frontend.</li>
+  <li><strong>Guest Join Page</strong> <span class="tag clasp">build</span> -- Minimal page: camera/mic selection, self-preview, connect to CLASP, establish WebRTC to host. Simple, based on AudioSpace patterns.</li>
+  <li><strong>Compositor Component</strong> <span class="tag pixi">build</span> -- vue3-pixi application that reads CLASP scene graph and renders video textures + overlays. Conceptually a specialized LumenCanvas show.</li>
+  <li><strong>Layout Engine</strong> <span class="tag pixi">build</span> -- Calculates slot positions for N participants in a given layout (grid, solo, PIP, sidebar). Pure geometry math.</li>
+  <li><strong>Canvas-to-LVQR Bridge</strong> <span class="tag lvqr">build</span> -- captureStream() + WebCodecs + audio mixing + send to LVQR. ~200 lines, following test-app pattern exactly.</li>
+  <li><strong>Overlay Components</strong> <span class="tag pixi">build</span> -- PixiJS renderers for lower thirds, banners, logos, chat bubbles. Styled containers.</li>
+  <li><strong>RTMP Egress (in LVQR)</strong> <span class="tag lvqr">build</span> -- Re-stream MoQ broadcast to RTMP endpoints. Or FFmpeg sidecar as interim.</li>
+</ul>
+
+<h3>Build Order</h3>
+<ul class="il">
+  <li><strong>Week 1-2:</strong> Compositor proof-of-concept. PixiJS canvas with one hardcoded video texture from getUserMedia. captureStream -> WebCodecs -> LVQR ingest. Confirm the pipeline works end-to-end.</li>
+  <li><strong>Week 3-4:</strong> CLASP integration. Guest join page. WebRTC signaling through CLASP. Two participants, video textures in compositor, basic grid layout.</li>
+  <li><strong>Week 5-6:</strong> Studio UI skeleton. Layout switching. Backstage/live staging. Speaking indicators. The scene graph pattern.</li>
+  <li><strong>Week 7-8:</strong> Overlays. Lower thirds, logos, banners. Scene presets (save/recall via CLASP bundles).</li>
+  <li><strong>Week 9-10:</strong> Chat aggregation. Featured comments. Polish. FFmpeg RTMP sidecar for YouTube/Twitch.</li>
+  <li><strong>Week 11-12:</strong> LVQR RTMP egress (native). Recording. Viewer page with lvqr-player. Ship v0.1.</li>
+</ul>
+</section>
+
+<!-- ═══ SECTION 9: PLUGIN STORY ═══ -->
+<section>
+<h2><span class="n clasp">09</span>Plugin Architecture (via CLASP)</h2>
+
+<p>CLASP's address-based model makes plugins natural. A plugin is anything that reads or writes to the scene graph. No plugin API to design. No IPC protocol. Just CLASP addresses with capability scoping.</p>
+
+<div class="code"><span class="c">// Auto-Director plugin (switches to active speaker)</span>
+<span class="c">// This is just a CLASP client that subscribes and writes</span>
+
+<span class="k">const</span> clasp = <span class="k">new</span> ClaspSDK(<span class="v">'wss://relay.clasp.to'</span>);
+<span class="k">await</span> clasp.connect({ token: pluginToken }); <span class="c">// scoped to scene:write + speaking:read</span>
+
+<span class="k">let</span> currentSpeaker = <span class="v">null</span>;
+clasp.<span class="f">on</span>(<span class="v">'/studio/*/speaking/*'</span>, (data, addr) => {
+  <span class="k">const</span> pid = addr.split(<span class="v">'/'</span>).pop();
+  <span class="k">if</span> (data.speaking && data.volume > <span class="v">0.5</span> && pid !== currentSpeaker) {
+    currentSpeaker = pid;
+    clasp.<span class="f">set</span>(<span class="v">'/studio/abc/scene/layout'</span>, <span class="v">'solo'</span>);
+    clasp.<span class="f">set</span>(<span class="v">'/studio/abc/scene/solo-target'</span>, pid);
+  }
+}, { maxRate: <span class="v">10</span> });</div>
+
+<p>Plugins can be:</p>
+<ul class="il">
+  <li><strong>Client-side (browser):</strong> IFrame panel in the studio UI that connects to CLASP and writes to overlay addresses. Custom lower third designer, poll widget, countdown timer.</li>
+  <li><strong>Server-side (any language):</strong> Any process that connects to the CLASP relay. Python script, Rust daemon, Node service. Chat aggregator that polls YouTube API and writes to <code>/studio/*/chat/**</code>. AI captioner that reads audio (via a separate WebRTC connection) and writes to <code>/studio/*/overlays/captions</code>.</li>
+  <li><strong>Hardware:</strong> CLASP already bridges to MIDI, OSC, DMX. A MIDI controller could switch scenes. An Arduino could trigger overlays. A lighting console could sync colors to the broadcast theme. This is where CLASP's heritage as a creative tooling protocol really shines.</li>
+</ul>
+
+<div class="callout clasp">
+  <div class="cl">CLASP Capabilities for Plugin Isolation</div>
+  Each plugin gets a capability token (JWT) scoped to specific address patterns. The auto-director plugin gets <code>read: ["/studio/*/speaking/**"]</code> and <code>write: ["/studio/*/scene/**"]</code>. It can't read chat, it can't modify overlays, it can't see other studios. CLASP enforces this at the relay level. No plugin sandbox runtime needed.
+</div>
+</section>
+
+<!-- ═══ CONCLUSION ═══ -->
+<section>
+<h2><span class="n clasp">10</span>Why This Architecture</h2>
+
+<p>This isn't a hypothetical "what if we used technology X." Every piece of this stack exists and has been tested:</p>
+
+<ul class="il">
+  <li><strong>CLASP WebRTC signaling</strong> works in AudioSpace with real users in real rooms</li>
+  <li><strong>CLASP state subscriptions</strong> drive real-time UIs in the chat app, the FPS game, the Crokinole game</li>
+  <li><strong>LVQR WebCodecs-to-relay pipeline</strong> works in the test-app with real video from real cameras</li>
+  <li><strong>PixiJS video textures</strong> are a core PixiJS feature, and vue3-pixi rendering is LumenCanvas's entire foundation</li>
+  <li><strong>canvas.captureStream()</strong> is a standard Web API supported in all modern browsers</li>
+</ul>
+
+<p>The new code is the <strong>studio UI</strong> (frontend), the <strong>layout engine</strong> (geometry), and the <strong>glue</strong> connecting these proven pieces. No new protocols. No new servers. No new infrastructure patterns. Just composition of things that already work.</p>
+
+<p>And because it's all your stack, you can instrument the whole thing. CLASP's signal inspector shows every scene graph change in real time. LVQR's admin API shows every active broadcast and viewer. PixiJS's renderer stats show frame timing. Full observability, no black boxes.</p>
+</section>
+
+<footer class="footer">
+  Architecture based on CLASP (github.com/lumencanvas/clasp), LVQR (github.com/virgilvox/lvqr), and PixiJS v8 with vue3-pixi. April 2026.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "name": "@commoncast/web",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@commoncast/clasp-client": "workspace:*",
+    "@commoncast/design-system": "workspace:*",
+    "@commoncast/studio-engine": "workspace:*",
+    "@pinia/nuxt": "^0.9.0",
+    "@vueuse/nuxt": "^12.0.0",
+    "nuxt": "^4.4.0",
+    "pinia": "^2.3.0",
+    "vue": "^3.5.0",
+    "vue-router": "^5.0.0"
+  },
+  "devDependencies": {
+    "@nuxt/test-utils": "^3.15.0",
+    "@types/dom-mediacapture-transform": "^0.1.10",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

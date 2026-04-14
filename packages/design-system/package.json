@@ -1,0 +1,48 @@
+{
+  "name": "@commoncast/design-system",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": ["**/*.css"],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./tokens": {
+      "types": "./src/tokens/tokens.ts",
+      "import": "./src/tokens/tokens.ts"
+    },
+    "./tokens.css": "./src/tokens/tokens.css",
+    "./tailwind.preset": {
+      "types": "./src/tailwind.preset.ts",
+      "import": "./src/tailwind.preset.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "story": "histoire dev",
+    "story:build": "histoire build"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "reka-ui": "^2.8.0",
+    "tailwind-variants": "^1.0.0"
+  },
+  "devDependencies": {
+    "@histoire/plugin-vue": "^0.17.0",
+    "@vue/test-utils": "^2.4.6",
+    "@vue/tsconfig": "^0.7.0",
+    "histoire": "^0.17.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "vue": "^3.5.0",
+    "vue-tsc": "^2.2.0"
+  }
+}

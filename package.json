@@ -1,0 +1,26 @@
+{
+  "name": "commoncast",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Open-source, browser-based live production studio. Broadcasting for the commons.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=@commoncast/web",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,vue,js,json,md,css}\"",
+    "story": "turbo run story --filter=@commoncast/design-system"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "@commoncast/design-system/tokens.css";
+@import "@commoncast/design-system/src/theme.css";
+
+/* commoncast app-level overrides — keep minimal. */
+html,
+body,
+#__nuxt {
+  height: 100%;
+  margin: 0;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--cc-ink-whisper);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--cc-ink-ghost);
+}

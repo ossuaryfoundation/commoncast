@@ -1,0 +1,85 @@
+/*
+ * Tailwind v4 @theme bridge for commoncast.
+ *
+ * This file maps our CSS custom properties (from tokens.css) into Tailwind v4
+ * theme names so utilities like `bg-chalk`, `text-ink-soft`, `border-border`,
+ * `font-ui`, `shadow-md`, etc. work.
+ */
+
+@import "./tokens/tokens.css";
+
+@theme {
+  --color-chalk: var(--cc-chalk);
+  --color-chalk-warm: var(--cc-chalk-warm);
+  --color-chalk-cool: var(--cc-chalk-cool);
+  --color-chalk-deep: var(--cc-chalk-deep);
+  --color-soot: var(--cc-soot);
+  --color-soot-mid: var(--cc-soot-mid);
+  --color-soot-soft: var(--cc-soot-soft);
+
+  --color-ink: var(--cc-ink);
+  --color-ink-soft: var(--cc-ink-soft);
+  --color-ink-muted: var(--cc-ink-muted);
+  --color-ink-ghost: var(--cc-ink-ghost);
+  --color-ink-whisper: var(--cc-ink-whisper);
+
+  --color-signal: var(--cc-signal);
+  --color-signal-hover: var(--cc-signal-hover);
+  --color-signal-strong: var(--cc-signal-strong);
+  --color-live: var(--cc-live);
+  --color-caution: var(--cc-caution);
+  --color-info: var(--cc-info);
+  --color-offline: var(--cc-offline);
+
+  --color-clasp: var(--cc-clasp);
+  --color-pixi: var(--cc-pixi);
+  --color-lvqr: var(--cc-lvqr);
+  --color-webrtc: var(--cc-webrtc);
+
+  --color-brand: var(--cc-brand);
+
+  --font-display: var(--cc-font-display);
+  --font-body: var(--cc-font-body);
+  --font-ui: var(--cc-font-ui);
+  --font-code: var(--cc-font-code);
+
+  --text-4xl: var(--cc-text-4xl);
+  --text-3xl: var(--cc-text-3xl);
+  --text-2xl: var(--cc-text-2xl);
+  --text-xl: var(--cc-text-xl);
+  --text-lg: var(--cc-text-lg);
+  --text-base: var(--cc-text-base);
+  --text-sm: var(--cc-text-sm);
+  --text-xs: var(--cc-text-xs);
+  --text-2xs: var(--cc-text-2xs);
+
+  --spacing-1: var(--cc-sp-1);
+  --spacing-2: var(--cc-sp-2);
+  --spacing-3: var(--cc-sp-3);
+  --spacing-4: var(--cc-sp-4);
+  --spacing-5: var(--cc-sp-5);
+  --spacing-6: var(--cc-sp-6);
+  --spacing-8: var(--cc-sp-8);
+  --spacing-10: var(--cc-sp-10);
+
+  --radius-sm: var(--cc-radius-sm);
+  --radius-md: var(--cc-radius-md);
+
+  --shadow-sm: var(--cc-shadow-sm);
+  --shadow-md: var(--cc-shadow-md);
+  --shadow-lg: var(--cc-shadow-lg);
+
+  --ease-snappy: var(--cc-ease-snappy);
+  --ease-smooth: var(--cc-ease-smooth);
+}
+
+/* Default app background — import in apps/web's global stylesheet. */
+html,
+body {
+  background: var(--cc-chalk);
+  color: var(--cc-ink);
+  font-family: var(--cc-font-body);
+  font-size: var(--cc-text-base);
+  line-height: var(--cc-leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
