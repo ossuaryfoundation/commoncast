@@ -10,12 +10,17 @@
  * (typically studios/[id].vue) can register them with the studio engine.
  */
 import { ref, watch, onScopeDispose, type Ref } from "vue";
-import { useClaspRoom } from "./useClaspRoom";
+import type { UseClaspRoomReturn } from "./useClaspRoom";
 import { usePeerConnection, type UsePeerConnectionReturn } from "./usePeerConnection";
 import type { ParticipantEntry } from "@commoncast/clasp-client";
 
 export interface UseStudioPeersOptions {
-  studioId: string;
+  /**
+   * A pre-instantiated clasp room — owned by the studio page so the same
+   * room can back both useStudioPeers (WebRTC mesh) and
+   * useStudioParticipants (presence projection).
+   */
+  room: UseClaspRoomReturn;
   myPid: string;
   role: "host" | "guest";
   /** Called lazily when a peer needs a local track to send. */
@@ -28,10 +33,12 @@ export interface UseStudioPeersReturn {
   readonly remotePids: Ref<readonly string[]>;
   join(displayName: string): Promise<void>;
   leave(): Promise<void>;
+  /** Host operation: tear down a specific peer connection by pid. */
+  closePeer(pid: string): void;
 }
 
 export function useStudioPeers(opts: UseStudioPeersOptions): UseStudioPeersReturn {
-  const room = useClaspRoom(opts.studioId, opts.myPid);
+  const room = opts.room;
   const peers = new Map<string, UsePeerConnectionReturn>();
   const remotePids = ref<string[]>([]);
   let signalUnsub: (() => void) | null = null;
@@ -56,12 +63,16 @@ export function useStudioPeers(opts: UseStudioPeersOptions): UseStudioPeersRetur
   }
 
   async function join(displayName: string): Promise<void> {
+    // Host self-promotes to live on join; guests land in backstage and
+    // wait for the host to bring them on stage (StreamYard-style flow).
     const entry: ParticipantEntry = {
       name: displayName,
       role: opts.role,
-      stage: "live",
+      stage: opts.role === "host" ? "live" : "backstage",
       slot: 0,
       muted: false,
+      raisedHand: false,
+      cameraOff: false,
     };
     await room.join(entry);
 
@@ -97,6 +108,14 @@ export function useStudioPeers(opts: UseStudioPeersOptions): UseStudioPeersRetur
     );
   }
 
+  function closePeer(pid: string): void {
+    const pc = peers.get(pid);
+    if (!pc) return;
+    pc.close();
+    peers.delete(pid);
+    refreshRemotePids();
+  }
+
   async function leave(): Promise<void> {
     participantsUnwatch?.();
     participantsUnwatch = null;
@@ -112,5 +131,5 @@ export function useStudioPeers(opts: UseStudioPeersOptions): UseStudioPeersRetur
     void leave();
   });
 
-  return { remotePids, join, leave };
+  return { remotePids, join, leave, closePeer };
 }

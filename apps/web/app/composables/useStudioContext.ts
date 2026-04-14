@@ -14,6 +14,7 @@ import type { UseStudioPeersReturn } from "./useStudioPeers";
 import type { UseStageSelectionReturn } from "./useStageSelection";
 import type { UseStudioRecorderReturn } from "./useStudioRecorder";
 import type { UseBroadcastSenderReturn } from "./useBroadcastSender";
+import type { UseStudioParticipantsReturn } from "./useStudioParticipants";
 
 export interface StudioDevices {
   readonly videoInputs: Ref<MediaDeviceInfo[]>;
@@ -35,6 +36,7 @@ export interface StudioContext {
   readonly engineReady: Readonly<Ref<boolean>>;
   readonly media: UseUserMediaReturn;
   readonly peers: UseStudioPeersReturn;
+  readonly participants: UseStudioParticipantsReturn;
   readonly selection: UseStageSelectionReturn;
   readonly recorder: UseStudioRecorderReturn;
   readonly sender: UseBroadcastSenderReturn;

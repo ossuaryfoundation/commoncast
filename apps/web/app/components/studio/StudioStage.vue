@@ -99,7 +99,7 @@ const activeShortcut = computed(
 </script>
 
 <template>
-  <div class="flex h-full flex-col bg-[var(--cc-chalk-cool)]">
+  <div class="flex h-full min-h-0 min-w-0 flex-col bg-[var(--cc-chalk-cool)]">
     <div
       class="flex items-center justify-between border-b border-[color:var(--cc-border)] bg-[var(--cc-chalk-warm)] px-4 py-2"
     >
@@ -117,9 +117,13 @@ const activeShortcut = computed(
       </span>
     </div>
 
-    <div class="flex flex-1 items-center justify-center p-6">
-      <BroadcastFrame class="max-w-full">
-        <canvas :ref="setCanvas" class="absolute inset-0 h-full w-full" />
+    <div class="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6">
+      <div
+        class="relative max-h-full max-w-full"
+        :style="{ aspectRatio: '16 / 9', height: '100%' }"
+      >
+        <BroadcastFrame class="!h-full !w-full">
+          <canvas :ref="setCanvas" class="absolute inset-0 h-full w-full" />
 
         <!-- clickable full-frame background clears selection -->
         <div class="absolute inset-0" @click="clearSelection" />
@@ -194,7 +198,8 @@ const activeShortcut = computed(
             </button>
           </div>
         </div>
-      </BroadcastFrame>
+        </BroadcastFrame>
+      </div>
     </div>
 
     <div

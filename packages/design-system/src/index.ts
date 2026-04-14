@@ -13,6 +13,8 @@ export { default as Button } from "./primitives/Button.vue";
 export { default as ColorSwatch } from "./primitives/ColorSwatch.vue";
 export { default as Input } from "./primitives/Input.vue";
 export { default as Kbd } from "./primitives/Kbd.vue";
+export { default as Menu } from "./primitives/Menu.vue";
+export type { MenuItem } from "./primitives/Menu.vue";
 export { default as OnAirBadge } from "./primitives/OnAirBadge.vue";
 export { default as PanelHeader } from "./primitives/PanelHeader.vue";
 export { default as Select } from "./primitives/Select.vue";

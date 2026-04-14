@@ -20,6 +20,17 @@ export interface StudioSession {
   announcePresence(entry: ParticipantEntry): Promise<void>;
   updatePresence(patch: Partial<ParticipantEntry>): Promise<void>;
 
+  /**
+   * Write (or null out) an arbitrary participant's entry. Used by the host
+   * to mutate another participant's presence — stage, muted, cameraOff,
+   * or removal (kick) when `entry` is null. No auth is enforced at the
+   * clasp layer; cooperative trust until an SFU is introduced.
+   */
+  setParticipant(
+    pid: ParticipantId,
+    entry: ParticipantEntry | null,
+  ): Promise<void>;
+
   /** Subscribe to every other participant. Returns an unsubscribe fn. */
   onParticipants(
     cb: (pid: ParticipantId, entry: ParticipantEntry | null) => void,
@@ -46,6 +57,10 @@ export interface ParticipantEntry {
   stage: "live" | "backstage";
   slot: number;
   muted: boolean;
+  /** Host-over camera blank, or guest self-disable. Optional for backwards compat. */
+  cameraOff?: boolean;
+  /** Guest signalling "I want to come on stage". Cleared by the host when promoting. */
+  raisedHand?: boolean;
 }
 
 export function joinStudio(
@@ -86,6 +101,13 @@ export function joinStudio(
     });
     unsubscribers.push(unsub);
     return unsub;
+  }
+
+  async function setParticipant(
+    pid: ParticipantId,
+    entry: ParticipantEntry | null,
+  ): Promise<void> {
+    await client.set(addresses.participant(studioId, pid), entry);
   }
 
   async function sendSignal(
@@ -148,6 +170,7 @@ export function joinStudio(
     participantId,
     announcePresence,
     updatePresence,
+    setParticipant,
     onParticipants,
     sendSignal,
     onSignal,

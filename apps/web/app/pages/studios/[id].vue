@@ -19,16 +19,19 @@
 -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { asSceneId, asSourceId } from "@commoncast/studio-engine";
 
 import { useStudioStore } from "~/stores/studio";
 import { usePrefsStore } from "~/stores/prefs";
+import { useParticipantsStore } from "~/stores/participants";
 import { useStudioEngine } from "~/composables/useStudioEngine";
 import { useUserMedia } from "~/composables/useUserMedia";
 import { useStudioRecorder } from "~/composables/useStudioRecorder";
 import { useBroadcastSender } from "~/composables/useBroadcastSender";
+import { useClaspRoom } from "~/composables/useClaspRoom";
 import { useStudioPeers } from "~/composables/useStudioPeers";
+import { useStudioParticipants } from "~/composables/useStudioParticipants";
 import { useStageSelection } from "~/composables/useStageSelection";
 import { useScreenCapture } from "~/composables/useScreenCapture";
 import { useAudioLevels } from "~/composables/useAudioLevels";
@@ -48,7 +51,9 @@ definePageMeta({ layout: "studio" });
 
 const studio = useStudioStore();
 const prefs = usePrefsStore();
+const participantsStore = useParticipantsStore();
 const route = useRoute();
+const router = useRouter();
 studio.studioId = String(route.params.id ?? "default");
 
 const guestName = typeof route.query.guest === "string" ? route.query.guest : null;
@@ -109,14 +114,40 @@ const selection = useStageSelection();
 const screen = useScreenCapture();
 const screenActive = computed(() => screen.videoTrack.value != null);
 
+// ─── room (shared by peers + participants) ─────────────────────────
+const room = useClaspRoom(studio.studioId, myPid);
+
 // ─── peers ─────────────────────────────────────────────────────────
 const peers = useStudioPeers({
-  studioId: studio.studioId,
+  room,
   myPid,
   role,
   getLocalTrack: () => media.videoTrack.value,
   onRemoteTrack: async (fromPid, track) => {
-    await mountSource(fromPid, `Peer ${fromPid.slice(0, 6)}`, track);
+    // Peer connections currently only carry video tracks; defensively
+    // ignore audio until the mixer slice lands so the engine never gets
+    // an audio-only track handed to an addSource({kind:"camera"}) call.
+    if (track.kind !== "video") return;
+    const label = participantsStore.all[fromPid]?.name ?? `Peer ${fromPid.slice(0, 6)}`;
+    await mountSource(fromPid, label, track);
+  },
+});
+
+// ─── participants projection + host controls ──────────────────────
+const participants = useStudioParticipants({
+  myPid,
+  role,
+  room,
+  onOwnMutedChanged: (muted) => {
+    const track = media.audioTrack.value;
+    if (track) track.enabled = !muted;
+  },
+  onOwnCameraOffChanged: (off) => {
+    const track = media.videoTrack.value;
+    if (track) track.enabled = !off;
+  },
+  onKicked: () => {
+    void router.push("/");
   },
 });
 
@@ -127,7 +158,12 @@ const peers = useStudioPeers({
 const mountedSources = shallowRef<Set<string>>(new Set());
 const peerLabels = shallowRef<Map<string, string>>(new Map());
 
-async function mountSource(id: string, name: string, track: MediaStreamTrack) {
+async function mountSource(
+  id: string,
+  name: string,
+  track: MediaStreamTrack,
+  opts: { autoAssign?: boolean } = {},
+) {
   if (!engine.ready.value) return;
   if (mountedSources.value.has(id)) {
     // Already mounted — replace by removing first so the new track is used.
@@ -145,7 +181,7 @@ async function mountSource(id: string, name: string, track: MediaStreamTrack) {
   const labels = new Map(peerLabels.value);
   labels.set(id, name);
   peerLabels.value = labels;
-  studio.autoAssignSource(id);
+  if (opts.autoAssign !== false) studio.autoAssignSource(id);
   renderScene();
 }
 
@@ -161,13 +197,14 @@ function unmountSource(id: string, opts: { preserveAssignments?: boolean } = {})
   renderScene();
 }
 
-// Reconcile local camera track.
+// Reconcile local camera track. Local camera always auto-assigns so the
+// host/guest sees their own feed in the self-preview immediately.
 watch(
   [engine.ready, () => media.videoTrack.value],
   async ([ready, track]) => {
     if (!ready) return;
     if (track) {
-      await mountSource(localSourceId, myName, track);
+      await mountSource(localSourceId, myName, track, { autoAssign: true });
     } else {
       unmountSource(localSourceId);
     }
@@ -175,13 +212,13 @@ watch(
   { immediate: true },
 );
 
-// Reconcile screen-capture track.
+// Reconcile screen-capture track — also auto-assigns on start.
 watch(
   () => screen.videoTrack.value,
   async (track) => {
     if (!engine.ready.value) return;
     if (track) {
-      await mountSource(screenSourceId, "Screen share", track);
+      await mountSource(screenSourceId, "Screen share", track, { autoAssign: true });
     } else {
       unmountSource(screenSourceId);
     }
@@ -195,6 +232,46 @@ watch(
     if (!prev) return;
     for (const old of prev) {
       if (!pids.includes(old)) unmountSource(old);
+    }
+  },
+);
+
+// Stage-driven assignment for remote peers. A peer's mounted track is only
+// auto-assigned to scene slots when their participant entry says
+// `stage === "live"`; backstage peers stay mounted (so we can see them in
+// the inventory and promote them instantly) but don't appear in any scene.
+watch(
+  () => participantsStore.onStage.map((p) => p.pid),
+  (liveNow, livePrev) => {
+    const prev = livePrev ?? [];
+    // Promoted: in liveNow but not in prev → auto-assign if the track is
+    // already mounted. (If not mounted yet, the onRemoteTrack mount path
+    // will trigger its own assignment via this same watcher on re-emit.)
+    for (const pid of liveNow) {
+      if (pid === myPid) continue;
+      if (prev.includes(pid)) continue;
+      if (mountedSources.value.has(pid)) studio.autoAssignSource(pid);
+    }
+    // Demoted: in prev but not in liveNow → clear from every scene's feeds
+    // (track stays mounted so re-promotion is instant).
+    for (const pid of prev) {
+      if (pid === myPid) continue;
+      if (liveNow.includes(pid)) continue;
+      studio.forgetSource(pid);
+    }
+    renderScene();
+  },
+);
+
+// When a remote peer's track is mounted AFTER they were already on-stage,
+// the watcher above won't re-fire (their pid was already in the list). Run
+// a reconcile pass on mountedSources changes.
+watch(
+  () => mountedSources.value,
+  () => {
+    for (const p of participantsStore.onStage) {
+      if (p.pid === myPid) continue;
+      if (mountedSources.value.has(p.pid)) studio.autoAssignSource(p.pid);
     }
   },
 );
@@ -323,6 +400,8 @@ function handleKey(e: KeyboardEvent) {
 function labelForSource(id: string): string {
   if (id === localSourceId) return myName;
   if (id === screenSourceId) return "Screen share";
+  const p = participantsStore.all[id];
+  if (p) return p.name;
   return peerLabels.value.get(id) ?? `Peer ${id.slice(0, 6)}`;
 }
 
@@ -357,6 +436,7 @@ const ctx: StudioContext = {
   engineReady: engine.ready,
   media,
   peers,
+  participants,
   selection,
   recorder,
   sender,
@@ -390,9 +470,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="grid h-full grid-rows-[44px_1fr_32px] bg-[var(--cc-chalk)]">
+  <div class="grid h-full grid-rows-[44px_minmax(0,1fr)_32px] bg-[var(--cc-chalk)]">
     <TopToolbar />
-    <div class="grid grid-cols-[240px_1fr_280px] overflow-hidden">
+    <div
+      class="grid min-h-0 grid-cols-[240px_minmax(0,1fr)_280px] overflow-hidden"
+    >
       <SourcesPanel />
       <StudioStage />
       <ControlsPanel />
