@@ -94,8 +94,13 @@ export interface Scene {
   id: SceneId;
   name: string;
   layout: LayoutId;
-  /** Ordered list of source IDs that fill the layout slots. */
-  feeds: ReadonlyArray<SourceId>;
+  /**
+   * Sparse slot assignment. `feeds[i]` is the source bound to slot i of
+   * the layout, or null if the slot is empty. Length should equal the
+   * layout's slot count (see LAYOUT_SLOT_COUNT in ./layouts); shorter is
+   * padded with null, longer is ignored.
+   */
+  feeds: ReadonlyArray<SourceId | null>;
   overlays: ReadonlyArray<OverlaySpec>;
   background?: string;
 }

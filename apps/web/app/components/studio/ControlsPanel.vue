@@ -1,5 +1,20 @@
+<!--
+  ControlsPanel — right-side inspector.
+
+  Five tabs. Every tab is wired to real state:
+
+  - Layout    → setSceneLayout(activeSceneId, …); rebuilds the selected
+                scene's feeds array around the new slot count. No more
+                "global activeLayout" — layout is a per-scene property.
+  - Overlays  → reads/writes activeScene.overlays, not a global overlay
+                bag. Flipping logo on the Panel scene no longer flips
+                logo on every other scene.
+  - Scenes    → F1–F5 scene recall buttons (unchanged).
+  - Brand     → brand store edits (still persisted via pinia-persist).
+  - Chat      → deliberate empty state until the real chat slice lands.
+-->
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import {
   ColorSwatch,
   Input,
@@ -32,6 +47,15 @@ const layouts: Array<{ id: LayoutId; label: string }> = [
   { id: "sidebar", label: "Sidebar" },
   { id: "pip", label: "PiP" },
 ];
+
+const activeLayout = computed<LayoutId>(
+  () => studio.activeScene?.layout ?? "grid",
+);
+const overlayState = computed(() => ({
+  logo: studio.activeScene?.overlays.logo ?? false,
+  lowerThird: studio.activeScene?.overlays.lowerThird ?? false,
+  ticker: studio.activeScene?.overlays.ticker ?? false,
+}));
 </script>
 
 <template>
@@ -43,35 +67,43 @@ const layouts: Array<{ id: LayoutId; label: string }> = [
 
     <div class="flex-1 overflow-y-auto px-4 py-4">
       <!-- Layout -->
-      <div v-if="activeTab === 'layout'" class="grid grid-cols-3 gap-2">
-        <LayoutOption
-          v-for="l in layouts"
-          :key="l.id"
-          :id="l.id"
-          :label="l.label"
-          :active="studio.activeLayout === l.id"
-          @select="studio.setLayout(l.id)"
-        />
+      <div v-if="activeTab === 'layout'" class="flex flex-col gap-3">
+        <p class="font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-muted)]">
+          Layout for <span class="text-[var(--cc-ink)]">{{ studio.activeScene?.name }}</span>
+        </p>
+        <div class="grid grid-cols-3 gap-2">
+          <LayoutOption
+            v-for="l in layouts"
+            :id="l.id"
+            :key="l.id"
+            :label="l.label"
+            :active="activeLayout === l.id"
+            @select="studio.setLayout(l.id)"
+          />
+        </div>
       </div>
 
-      <!-- Overlays -->
+      <!-- Overlays (per scene) -->
       <div v-else-if="activeTab === 'overlays'" class="flex flex-col">
+        <p class="mb-3 font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-muted)]">
+          Overlays for <span class="text-[var(--cc-ink)]">{{ studio.activeScene?.name }}</span>
+        </p>
         <OverlayRow
-          :model-value="studio.overlays.logo"
+          :model-value="overlayState.logo"
           label="Logo"
           description="Image · Top Right"
           @update:model-value="studio.setOverlay('logo', $event)"
         />
         <OverlayRow
-          :model-value="studio.overlays.lowerThird"
+          :model-value="overlayState.lowerThird"
           label="Lower Third"
-          description="Banner"
+          description="Name · Subtitle"
           @update:model-value="studio.setOverlay('lowerThird', $event)"
         />
         <OverlayRow
-          :model-value="studio.overlays.ticker"
+          :model-value="overlayState.ticker"
           label="Ticker"
-          description="Scrolling Text"
+          description="Scrolling text"
           @update:model-value="studio.setOverlay('ticker', $event)"
         />
       </div>
@@ -92,8 +124,8 @@ const layouts: Array<{ id: LayoutId; label: string }> = [
       <!-- Brand -->
       <div v-else-if="activeTab === 'brand'" class="flex flex-col gap-4">
         <div>
-          <div class="mb-2 font-ui text-[9px] uppercase tracking-wide text-[var(--cc-ink-muted)]">
-            Accent Color
+          <div class="mb-2 font-ui text-[9px] uppercase tracking-[0.12em] text-[var(--cc-ink-muted)]">
+            Accent color
           </div>
           <div class="flex flex-wrap gap-2">
             <ColorSwatch
@@ -105,21 +137,18 @@ const layouts: Array<{ id: LayoutId; label: string }> = [
             />
           </div>
         </div>
-        <Input
-          v-model="studio.brand.lowerName"
-          label="Lower Third Name"
-        />
-        <Input
-          v-model="studio.brand.lowerSubtitle"
-          label="Lower Third Subtitle"
-        />
-        <Input v-model="studio.brand.logoText" label="Logo Text" />
-        <Input v-model="studio.brand.tickerText" label="Ticker Text" />
+        <Input v-model="studio.brand.lowerName" label="Lower third name" />
+        <Input v-model="studio.brand.lowerSubtitle" label="Lower third subtitle" />
+        <Input v-model="studio.brand.logoText" label="Logo text" />
+        <Input v-model="studio.brand.tickerText" label="Ticker text" />
       </div>
 
       <!-- Chat -->
-      <div v-else class="font-ui text-[10px] text-[var(--cc-ink-muted)]">
-        Chat integration ships after MVP.
+      <div
+        v-else
+        class="border border-dashed border-[color:var(--cc-border-strong)] bg-transparent p-3 font-ui text-[9px] uppercase leading-[1.6] tracking-[0.1em] text-[var(--cc-ink-ghost)]"
+      >
+        Chat is not wired yet. Multi-platform chat + moderation is a separate slice.
       </div>
     </div>
   </aside>

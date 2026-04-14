@@ -1,21 +1,42 @@
 <!--
-  Studio — the host (and guest) broadcasting interface. The heart of commoncast.
+  Studio — host/guest broadcasting interface. The wiring hub.
 
-  The engine / media / recorder / sender / peers all live at this level so a
-  single compositor instance is shared across the toolbar, stage, and
-  controls. Children read the canvas slot via provide/inject.
+  Everything stateful lives at this level: engine, media, devices, recorder,
+  sender, peers, stage selection, screen capture, audio levels. The page
+  builds a single StudioContext and provides it to every child — TopToolbar,
+  SourcesPanel, StudioStage, ControlsPanel, StatusBar all `inject` the same
+  instance instead of creating their own.
+
+  Source lifecycle (auto-assign):
+    - When a source (local camera, screen share, remote peer track) arrives,
+      it's added to the compositor AND auto-assigned to the first empty slot
+      of every scene that doesn't already reference it.
+    - When a source is removed (camera switch, screen share stop, peer
+      leaves), it's torn out of the compositor AND cleared from every scene's
+      feeds.
+    - The direct-manipulation model (click a slot, click a source) lets the
+      user override any auto-assignment.
 -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, provide, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, shallowRef, watch } from "vue";
 import { useRoute } from "vue-router";
 import { asSceneId, asSourceId } from "@commoncast/studio-engine";
 
 import { useStudioStore } from "~/stores/studio";
+import { usePrefsStore } from "~/stores/prefs";
 import { useStudioEngine } from "~/composables/useStudioEngine";
 import { useUserMedia } from "~/composables/useUserMedia";
 import { useStudioRecorder } from "~/composables/useStudioRecorder";
 import { useBroadcastSender } from "~/composables/useBroadcastSender";
 import { useStudioPeers } from "~/composables/useStudioPeers";
+import { useStageSelection } from "~/composables/useStageSelection";
+import { useScreenCapture } from "~/composables/useScreenCapture";
+import { useAudioLevels } from "~/composables/useAudioLevels";
+import { useMediaDevices } from "~/composables/useMediaDevices";
+import {
+  provideStudioContext,
+  type StudioContext,
+} from "~/composables/useStudioContext";
 
 import TopToolbar from "~/components/studio/TopToolbar.vue";
 import SourcesPanel from "~/components/studio/SourcesPanel.vue";
@@ -26,10 +47,10 @@ import StatusBar from "~/components/studio/StatusBar.vue";
 definePageMeta({ layout: "studio" });
 
 const studio = useStudioStore();
+const prefs = usePrefsStore();
 const route = useRoute();
 studio.studioId = String(route.params.id ?? "default");
 
-// Guest mode is selected by a ?guest=<name> query param coming from /join/[id].
 const guestName = typeof route.query.guest === "string" ? route.query.guest : null;
 const role: "host" | "guest" = guestName ? "guest" : "host";
 const myName = guestName ?? "Host";
@@ -38,65 +59,173 @@ const myPid =
     ? crypto.randomUUID()
     : `pid-${Math.random().toString(36).slice(2)}`;
 
-// Canvas ref owned by the page; StudioStage slots the DOM element into it.
+const localSourceId = myPid;
+const screenSourceId = `${myPid}:screen`;
+
+// ─── canvas + engine ───────────────────────────────────────────────
 const canvas = ref<HTMLCanvasElement | null>(null);
 provide("commoncast:canvas", canvas);
 
 const engine = useStudioEngine(canvas, { width: 1280, height: 720, fps: 30 });
+
+// ─── media, devices, audio levels ──────────────────────────────────
 const media = useUserMedia();
-const recorder = useStudioRecorder();
-const sender = useBroadcastSender();
+const devices = useMediaDevices();
+const audioStream = computed(() => media.stream.value);
+const { level: audioLevel, peak: audioPeak } = useAudioLevels(audioStream);
 
-const mountedSourceIds = new Set<string>();
-
-async function addCamera(pid: string, name: string, track: MediaStreamTrack) {
-  if (!engine.ready.value) return;
-  if (mountedSourceIds.has(pid)) return;
-  await engine.addSource({
-    kind: "camera",
-    id: asSourceId(pid),
-    name,
-    track,
-  });
-  mountedSourceIds.add(pid);
+function buildConstraints(): MediaStreamConstraints {
+  const video: MediaTrackConstraints = { width: 1280, height: 720 };
+  if (prefs.defaultCameraId) video.deviceId = { exact: prefs.defaultCameraId };
+  const audio: MediaTrackConstraints = {};
+  if (prefs.defaultMicId) audio.deviceId = { exact: prefs.defaultMicId };
+  return { video, audio };
 }
 
+async function startLocalMedia() {
+  try {
+    await media.start(buildConstraints());
+    await devices.refresh();
+  } catch (err) {
+    console.warn("[commoncast] getUserMedia failed", err);
+  }
+}
+
+async function switchCamera(deviceId: string | null) {
+  prefs.setDefaultCamera(deviceId);
+  await startLocalMedia();
+}
+async function switchMic(deviceId: string | null) {
+  prefs.setDefaultMic(deviceId);
+  await startLocalMedia();
+}
+
+// ─── recorder + sender + selection ─────────────────────────────────
+const recorder = useStudioRecorder();
+const sender = useBroadcastSender();
+const selection = useStageSelection();
+
+// ─── screen capture ────────────────────────────────────────────────
+const screen = useScreenCapture();
+const screenActive = computed(() => screen.videoTrack.value != null);
+
+// ─── peers ─────────────────────────────────────────────────────────
 const peers = useStudioPeers({
   studioId: studio.studioId,
   myPid,
   role,
   getLocalTrack: () => media.videoTrack.value,
   onRemoteTrack: async (fromPid, track) => {
-    await addCamera(fromPid, fromPid, track);
-    renderScene();
+    await mountSource(fromPid, `Peer ${fromPid.slice(0, 6)}`, track);
   },
 });
 
+// ─── source mounting ───────────────────────────────────────────────
+
+// Track which source ids are currently mounted on the compositor so we can
+// reconcile as tracks change.
+const mountedSources = shallowRef<Set<string>>(new Set());
+const peerLabels = shallowRef<Map<string, string>>(new Map());
+
+async function mountSource(id: string, name: string, track: MediaStreamTrack) {
+  if (!engine.ready.value) return;
+  if (mountedSources.value.has(id)) {
+    // Already mounted — replace by removing first so the new track is used.
+    unmountSource(id, { preserveAssignments: true });
+  }
+  await engine.addSource({
+    kind: "camera",
+    id: asSourceId(id),
+    name,
+    track,
+  });
+  const next = new Set(mountedSources.value);
+  next.add(id);
+  mountedSources.value = next;
+  const labels = new Map(peerLabels.value);
+  labels.set(id, name);
+  peerLabels.value = labels;
+  studio.autoAssignSource(id);
+  renderScene();
+}
+
+function unmountSource(id: string, opts: { preserveAssignments?: boolean } = {}) {
+  if (!mountedSources.value.has(id)) return;
+  engine.removeSource(asSourceId(id));
+  const next = new Set(mountedSources.value);
+  next.delete(id);
+  mountedSources.value = next;
+  if (!opts.preserveAssignments) {
+    studio.forgetSource(id);
+  }
+  renderScene();
+}
+
+// Reconcile local camera track.
+watch(
+  [engine.ready, () => media.videoTrack.value],
+  async ([ready, track]) => {
+    if (!ready) return;
+    if (track) {
+      await mountSource(localSourceId, myName, track);
+    } else {
+      unmountSource(localSourceId);
+    }
+  },
+  { immediate: true },
+);
+
+// Reconcile screen-capture track.
+watch(
+  () => screen.videoTrack.value,
+  async (track) => {
+    if (!engine.ready.value) return;
+    if (track) {
+      await mountSource(screenSourceId, "Screen share", track);
+    } else {
+      unmountSource(screenSourceId);
+    }
+  },
+);
+
+// Reconcile when peers disappear.
+watch(
+  () => peers.remotePids.value,
+  (pids, prev) => {
+    if (!prev) return;
+    for (const old of prev) {
+      if (!pids.includes(old)) unmountSource(old);
+    }
+  },
+);
+
+// ─── scene rendering ───────────────────────────────────────────────
 function renderScene() {
   if (!engine.ready.value) return;
-  const feeds = Array.from(mountedSourceIds).map((id) => asSourceId(id));
+  const scene = studio.activeScene;
+  if (!scene) return;
   engine.setScene({
-    id: asSceneId(studio.activeSceneId),
-    name: studio.activeScene?.name ?? "",
-    layout: studio.activeLayout,
-    feeds,
+    id: asSceneId(scene.id),
+    name: scene.name,
+    layout: scene.layout,
+    feeds: scene.feeds.map((id) => (id ? asSourceId(id) : null)),
     overlays: [
       {
         kind: "logo",
-        visible: studio.overlays.logo,
+        visible: scene.overlays.logo,
         text: studio.brand.logoText,
         accent: studio.brand.accent,
       },
       {
         kind: "lowerThird",
-        visible: studio.overlays.lowerThird,
+        visible: scene.overlays.lowerThird,
         name: studio.brand.lowerName,
         subtitle: studio.brand.lowerSubtitle,
         accent: studio.brand.accent,
       },
       {
         kind: "ticker",
-        visible: studio.overlays.ticker,
+        visible: scene.overlays.ticker,
         text: studio.brand.tickerText,
         accent: studio.brand.accent,
       },
@@ -105,21 +234,19 @@ function renderScene() {
 }
 
 watch(
-  [engine.ready, media.videoTrack],
-  async ([ready, track]) => {
-    if (!ready || !track) return;
-    await addCamera(myPid, myName, track);
-    renderScene();
-  },
-);
-
-watch(
-  () => [studio.activeLayout, studio.overlays, studio.brand, studio.activeSceneId],
+  () => [
+    engine.ready.value,
+    studio.activeSceneId,
+    studio.activeScene?.layout,
+    studio.activeScene?.feeds,
+    studio.activeScene?.overlays,
+    studio.brand,
+  ],
   () => renderScene(),
   { deep: true },
 );
 
-// A. Broadcast — studio.isLive is toggled by the Go Live button in TopToolbar.
+// ─── broadcast + record wiring (unchanged semantics) ──────────────
 watch(
   () => studio.isLive,
   async (live) => {
@@ -146,7 +273,6 @@ watch(
   },
 );
 
-// B. Record — studio.isRecording is toggled by the Record button in TopToolbar.
 watch(
   () => studio.isRecording,
   async (rec) => {
@@ -158,7 +284,10 @@ watch(
         return;
       }
       recorder.start(stream);
-    } else if (recorder.state.value === "recording" || recorder.state.value === "paused") {
+    } else if (
+      recorder.state.value === "recording" ||
+      recorder.state.value === "paused"
+    ) {
       const blob = await recorder.stop();
       if (blob) downloadBlob(blob, `commoncast-${Date.now()}.webm`);
     }
@@ -176,7 +305,7 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Keyboard shortcuts F1–F5 for scene recall.
+// ─── keyboard ──────────────────────────────────────────────────────
 function handleKey(e: KeyboardEvent) {
   const target = e.target as HTMLElement | null;
   if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
@@ -190,20 +319,64 @@ function handleKey(e: KeyboardEvent) {
   }
 }
 
+// ─── StudioContext ─────────────────────────────────────────────────
+function labelForSource(id: string): string {
+  if (id === localSourceId) return myName;
+  if (id === screenSourceId) return "Screen share";
+  return peerLabels.value.get(id) ?? `Peer ${id.slice(0, 6)}`;
+}
+
+function assignToSelectedSlot(sourceId: string) {
+  const slot = selection.slot.value;
+  if (slot == null) return;
+  const scene = studio.activeScene;
+  if (!scene) return;
+  studio.assignSlot(scene.id, slot, sourceId);
+  selection.clear();
+}
+
+const screenFacade = {
+  active: screenActive,
+  async start() {
+    try {
+      await screen.start();
+    } catch {
+      // user cancelled — ignore
+    }
+  },
+  stop() {
+    screen.stop();
+  },
+};
+
+const ctx: StudioContext = {
+  myPid,
+  myName,
+  role,
+  engine: engine.compositor,
+  engineReady: engine.ready,
+  media,
+  peers,
+  selection,
+  recorder,
+  sender,
+  devices,
+  screen: screenFacade,
+  audioLevel,
+  audioPeak,
+  localSourceId,
+  screenSourceId,
+  switchCamera,
+  switchMic,
+  assignToSelectedSlot,
+  labelForSource,
+};
+provideStudioContext(ctx);
+
+// ─── lifecycle ─────────────────────────────────────────────────────
 onMounted(async () => {
   window.addEventListener("keydown", handleKey);
-
-  // Best-effort local camera + mic.
-  try {
-    await media.start({
-      audio: true,
-      video: { width: 1280, height: 720 },
-    });
-  } catch {
-    // no camera — the studio still works for layout/branding previews
-  }
-
-  // Join the clasp room and start peering.
+  await startLocalMedia();
   try {
     await peers.join(myName);
   } catch (err) {
@@ -219,7 +392,7 @@ onUnmounted(() => {
 <template>
   <div class="grid h-full grid-rows-[44px_1fr_32px] bg-[var(--cc-chalk)]">
     <TopToolbar />
-    <div class="grid grid-cols-[220px_1fr_280px] overflow-hidden">
+    <div class="grid grid-cols-[240px_1fr_280px] overflow-hidden">
       <SourcesPanel />
       <StudioStage />
       <ControlsPanel />

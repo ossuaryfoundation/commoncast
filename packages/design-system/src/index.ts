@@ -12,11 +12,15 @@ export { default as Badge } from "./primitives/Badge.vue";
 export { default as Button } from "./primitives/Button.vue";
 export { default as ColorSwatch } from "./primitives/ColorSwatch.vue";
 export { default as Input } from "./primitives/Input.vue";
+export { default as Kbd } from "./primitives/Kbd.vue";
 export { default as OnAirBadge } from "./primitives/OnAirBadge.vue";
 export { default as PanelHeader } from "./primitives/PanelHeader.vue";
+export { default as Select } from "./primitives/Select.vue";
+export type { SelectItem } from "./primitives/Select.vue";
 export { default as StatusDot } from "./primitives/StatusDot.vue";
 export { default as Tabs } from "./primitives/Tabs.vue";
 export { default as Toggle } from "./primitives/Toggle.vue";
+export { default as VUMeter } from "./primitives/VUMeter.vue";
 
 // ---- components ----
 export { default as BroadcastFrame } from "./components/BroadcastFrame.vue";

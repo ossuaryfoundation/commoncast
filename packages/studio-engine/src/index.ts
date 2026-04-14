@@ -5,7 +5,12 @@
  */
 
 export * from "./types.js";
-export { computeLayout } from "./layouts/index.js";
+export {
+  computeLayout,
+  computeSlots,
+  getSlotCount,
+  LAYOUT_SLOT_COUNT,
+} from "./layouts/index.js";
 export { createCameraSource } from "./sources/CameraSource.js";
 export type { CameraSourceHandle } from "./sources/CameraSource.js";
 export {

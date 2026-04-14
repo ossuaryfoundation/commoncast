@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { computeLayout } from "../src/layouts/index.js";
+import {
+  computeLayout,
+  computeSlots,
+  getSlotCount,
+  LAYOUT_SLOT_COUNT,
+} from "../src/layouts/index.js";
+import type { LayoutId } from "../src/types.js";
 
 describe("computeLayout", () => {
   it("returns one rect for solo with any feed count >= 1", () => {
@@ -48,5 +54,55 @@ describe("computeLayout", () => {
         expect(r.y + r.height).toBeLessThanOrEqual(height);
       }
     }
+  });
+});
+
+describe("computeSlots / LAYOUT_SLOT_COUNT", () => {
+  const LAYOUTS: LayoutId[] = ["solo", "split", "grid", "speaker", "sidebar", "pip"];
+
+  it("slot count matches the fixed layout registry", () => {
+    expect(LAYOUT_SLOT_COUNT).toEqual({
+      solo: 1,
+      split: 2,
+      grid: 4,
+      speaker: 3,
+      sidebar: 3,
+      pip: 2,
+    });
+    for (const id of LAYOUTS) {
+      expect(getSlotCount(id)).toBe(LAYOUT_SLOT_COUNT[id]);
+    }
+  });
+
+  it("returns exactly LAYOUT_SLOT_COUNT rects per layout", () => {
+    for (const id of LAYOUTS) {
+      const rects = computeSlots(id, 1280, 720);
+      expect(rects).toHaveLength(LAYOUT_SLOT_COUNT[id]);
+    }
+  });
+
+  it("all slot rects stay within canvas bounds at several sizes", () => {
+    for (const [w, h] of [
+      [1280, 720],
+      [1920, 1080],
+      [640, 360],
+    ] as const) {
+      for (const id of LAYOUTS) {
+        for (const r of computeSlots(id, w, h)) {
+          expect(r.x).toBeGreaterThanOrEqual(0);
+          expect(r.y).toBeGreaterThanOrEqual(0);
+          expect(r.width).toBeGreaterThan(0);
+          expect(r.height).toBeGreaterThan(0);
+          expect(r.x + r.width).toBeLessThanOrEqual(w);
+          expect(r.y + r.height).toBeLessThanOrEqual(h);
+        }
+      }
+    }
+  });
+
+  it("computeLayout is a prefix slice of computeSlots (except solo's degenerate case)", () => {
+    const slots = computeSlots("grid", 1280, 720);
+    expect(computeLayout("grid", 1280, 720, 2)).toEqual(slots.slice(0, 2));
+    expect(computeLayout("grid", 1280, 720, 4)).toEqual(slots);
   });
 });

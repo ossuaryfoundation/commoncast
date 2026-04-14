@@ -4,12 +4,12 @@
  * Note: device labels are empty until the user has granted a permission at
  * least once. That's a browser rule we can't work around.
  */
-import { ref, onScopeDispose, onMounted } from "vue";
+import { ref, onScopeDispose, onMounted, type Ref } from "vue";
 
 export interface DeviceList {
-  videoInputs: ReturnType<typeof ref<MediaDeviceInfo[]>>;
-  audioInputs: ReturnType<typeof ref<MediaDeviceInfo[]>>;
-  audioOutputs: ReturnType<typeof ref<MediaDeviceInfo[]>>;
+  videoInputs: Ref<MediaDeviceInfo[]>;
+  audioInputs: Ref<MediaDeviceInfo[]>;
+  audioOutputs: Ref<MediaDeviceInfo[]>;
   refresh(): Promise<void>;
 }
 

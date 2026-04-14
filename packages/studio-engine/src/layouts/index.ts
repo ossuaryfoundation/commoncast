@@ -1,13 +1,31 @@
 /**
  * commoncast / studio-engine / layouts
  *
- * Layouts are pure functions: given a canvas size and a feed count, return a
- * list of rects (one per feed). No Pixi, no DOM. Trivially unit-testable.
+ * Layouts are pure functions. Each layout has a fixed slot count — the UI
+ * assigns one source per slot, rather than pouring a flat feed list into
+ * whatever layout happens to be active. `computeSlots` returns the full rect
+ * list for a layout (length = LAYOUT_SLOT_COUNT[layoutId]); `computeLayout`
+ * is kept as a feed-count-truncating convenience for callers that still
+ * want the old shape. No Pixi, no DOM. Trivially unit-testable.
  */
 
 import type { LayoutId, Rect } from "../types.js";
 
 const pad = 12;
+
+/** Fixed slot count per layout. The UI never shows more slots than this. */
+export const LAYOUT_SLOT_COUNT: Record<LayoutId, number> = {
+  solo: 1,
+  split: 2,
+  grid: 4,
+  speaker: 3,
+  sidebar: 3,
+  pip: 2,
+};
+
+export function getSlotCount(id: LayoutId): number {
+  return LAYOUT_SLOT_COUNT[id];
+}
 
 function split(width: number, height: number, cols: number, rows: number): Rect[] {
   const rects: Rect[] = [];
@@ -26,46 +44,46 @@ function split(width: number, height: number, cols: number, rows: number): Rect[
   return rects;
 }
 
-export function computeLayout(
-  id: LayoutId,
-  width: number,
-  height: number,
-  feedCount: number,
-): Rect[] {
-  if (feedCount === 0) return [];
+/**
+ * Return ALL slot rects for a layout at the given canvas size. The returned
+ * array's length always equals LAYOUT_SLOT_COUNT[id]. This is what the
+ * compositor + the HTML slot overlay both read from.
+ */
+export function computeSlots(id: LayoutId, width: number, height: number): Rect[] {
   switch (id) {
     case "solo":
       return [{ x: pad, y: pad, width: width - pad * 2, height: height - pad * 2 }];
     case "split":
-      return split(width, height, 2, 1).slice(0, feedCount);
+      return split(width, height, 2, 1);
     case "grid":
-      return split(width, height, 2, 2).slice(0, feedCount);
+      return split(width, height, 2, 2);
     case "speaker": {
-      // 2.5fr main left, 1fr stacked right
       const mainW = ((width - pad * 3) * 2.5) / 3.5;
-      const sideW = (width - pad * 3) - mainW;
+      const sideW = width - pad * 3 - mainW;
       const halfH = (height - pad * 3) / 2;
-      const rects: Rect[] = [
+      return [
         { x: pad, y: pad, width: mainW, height: height - pad * 2 },
         { x: pad * 2 + mainW, y: pad, width: sideW, height: halfH },
         { x: pad * 2 + mainW, y: pad * 2 + halfH, width: sideW, height: halfH },
       ];
-      return rects.slice(0, feedCount);
     }
     case "sidebar": {
       const mainW = ((width - pad * 3) * 2.2) / 3.2;
-      const sideW = (width - pad * 3) - mainW;
+      const sideW = width - pad * 3 - mainW;
       const halfH = (height - pad * 3) / 2;
-      const rects: Rect[] = [
+      return [
         { x: pad, y: pad, width: mainW, height: height - pad * 2 },
         { x: pad * 2 + mainW, y: pad, width: sideW, height: halfH },
         { x: pad * 2 + mainW, y: pad * 2 + halfH, width: sideW, height: halfH },
       ];
-      return rects.slice(0, feedCount);
     }
     case "pip": {
-      const main: Rect = { x: pad, y: pad, width: width - pad * 2, height: height - pad * 2 };
-      if (feedCount === 1) return [main];
+      const main: Rect = {
+        x: pad,
+        y: pad,
+        width: width - pad * 2,
+        height: height - pad * 2,
+      };
       const pipW = Math.round(width * 0.22);
       const pipH = Math.round(pipW * (9 / 16));
       const pip: Rect = {
@@ -77,4 +95,18 @@ export function computeLayout(
       return [main, pip];
     }
   }
+}
+
+/**
+ * Legacy API: return the first N slot rects for a layout. Kept for any
+ * caller that still wants the dense-feed shape.
+ */
+export function computeLayout(
+  id: LayoutId,
+  width: number,
+  height: number,
+  feedCount: number,
+): Rect[] {
+  if (feedCount === 0) return [];
+  return computeSlots(id, width, height).slice(0, feedCount);
 }

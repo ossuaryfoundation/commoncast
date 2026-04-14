@@ -28,7 +28,7 @@ import {
   Text,
   Texture,
 } from "pixi.js";
-import { computeLayout } from "./layouts/index.js";
+import { computeSlots, getSlotCount } from "./layouts/index.js";
 import { createCameraSource, type CameraSourceHandle } from "./sources/CameraSource.js";
 import {
   DEFAULT_SETTINGS,
@@ -166,24 +166,22 @@ export function createCompositor(opts: CreateCompositorOptions): Compositor {
   function applyScene(scene: Scene): void {
     currentScene = scene;
 
-    // Rebuild feeds layer according to layout.
+    // Rebuild feeds layer from sparse slot assignments.
     feedsLayer.removeChildren();
-    const rects = computeLayout(
-      scene.layout,
-      settings.width,
-      settings.height,
-      scene.feeds.length,
-    );
-    scene.feeds.forEach((sourceId, i) => {
-      const mounted = sources.get(sourceId);
+    const slotCount = getSlotCount(scene.layout);
+    const rects = computeSlots(scene.layout, settings.width, settings.height);
+    for (let i = 0; i < slotCount; i++) {
       const rect = rects[i];
-      if (!mounted || !rect) return;
+      const sourceId = scene.feeds[i] ?? null;
+      if (!rect || !sourceId) continue;
+      const mounted = sources.get(sourceId);
+      if (!mounted) continue;
       mounted.sprite.x = rect.x;
       mounted.sprite.y = rect.y;
       mounted.sprite.width = rect.width;
       mounted.sprite.height = rect.height;
       feedsLayer.addChild(mounted.sprite);
-    });
+    }
 
     // Rebuild overlays layer.
     overlaysLayer.removeChildren();
